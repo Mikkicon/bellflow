@@ -1,21 +1,46 @@
-# save_session.py
-from playwright.sync_api import sync_playwright
-import time
+#!/usr/bin/env python3
+"""
+Simple script to create a browser session for manual login.
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False, slow_mo=100)  # headful, slow for convenience
-    context = browser.new_context()
-    page = context.new_page()
+This is a convenience wrapper around SessionManager.create_session()
+for users who prefer a simple command-line tool.
+"""
 
-    page.goto("https://www.threads.com/@yannlecun", wait_until="domcontentloaded")
-    time.sleep(2)  # Wait for page to render
-    print("🔓 Log in manually in the browser window...")
+import sys
+from scraper import SessionManager
 
-    # Keep browser open until you press Enter
-    input("Press Enter after you've logged in to save the session...")
 
-    # Save session (cookies + localStorage)
-    context.storage_state(path="storage_state.json")
-    print("✅ Session saved to storage_state.json")
+def main():
+    """Create a browser session for manual login."""
+    print("🎭 Browser Session Creator")
+    print("=" * 60)
 
-    browser.close()
+    # Get user input
+    user_id = input("Enter user ID (e.g., 'user1'): ").strip()
+    if not user_id:
+        print("❌ User ID cannot be empty")
+        sys.exit(1)
+
+    url = input("Enter URL to login to (default: https://www.threads.com): ").strip()
+    if not url:
+        url = "https://www.threads.com"
+
+    print("\n" + "=" * 60)
+
+    # Create session
+    session_mgr = SessionManager()
+    session_mgr.create_session(
+        user_id=user_id,
+        url=url,
+        headless=False,
+        slow_mo=100
+    )
+
+    print("\n" + "=" * 60)
+    print("✅ Session created successfully!")
+    print(f"   You can now use user_id='{user_id}' in your scraper")
+    print("=" * 60)
+
+
+if __name__ == "__main__":
+    main()

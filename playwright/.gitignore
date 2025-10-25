@@ -9,8 +9,11 @@ venv/
 ENV/
 
 # Playwright
+browser_profile/
+browser_profiles/
 storage_state.json
 threads_data_*.json
+*.json
 debug_page.png
 *.png
 

@@ -1,26 +1,35 @@
 #!/bin/bash
 
-echo "🎭 Playwright Threads Scraper"
+echo "🎭 Playwright Multi-Platform Scraper"
 echo "=============================="
 echo ""
-echo "🔓 Step 1: Saving session..."
-echo "A browser will open. Log in to Threads, then press Enter in the terminal."
+echo "This script will:"
+echo "1. Create a browser session (if needed)"
+echo "2. Run the test scraper with examples"
 echo ""
 
-uv run python save_session.py
+# Check if any profiles exist
+if [ -d "browser_profiles" ] && [ "$(ls -A browser_profiles 2>/dev/null)" ]; then
+    echo "✅ Found existing browser profiles:"
+    ls -1 browser_profiles/
+    echo ""
+    read -p "Create a new session? (y/N): " create_new
 
-if [ -f "storage_state.json" ]; then
-    echo ""
-    echo "✅ Session saved successfully!"
-    echo ""
-    echo "⏳ Waiting 3 seconds before starting scraper..."
-    sleep 3
-    echo ""
-    echo "🚀 Step 2: Running scraper..."
-    echo ""
-    uv run python scrape_scroll.py
+    if [[ $create_new =~ ^[Yy]$ ]]; then
+        echo ""
+        uv run python save_session.py
+    fi
 else
+    echo "⚠️  No browser profiles found."
+    echo "   Creating a new session first..."
     echo ""
-    echo "❌ Session save failed. Scraper not started."
-    exit 1
+    uv run python save_session.py
 fi
+
+echo ""
+echo "=============================="
+echo "🚀 Running test scraper..."
+echo "=============================="
+echo ""
+
+uv run python test_scraper.py
