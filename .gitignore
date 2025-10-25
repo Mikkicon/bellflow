@@ -133,6 +133,10 @@ dmypy.json
 *.sqlite
 *.sqlite3
 
+# Browser profiles (Playwright sessions)
+browser_profiles/
+src/backend/browser_profiles/
+
 # IDE specific files
 .vscode/
 .idea/
