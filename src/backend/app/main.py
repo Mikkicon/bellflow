@@ -8,8 +8,9 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from app.routers import sample, scraper
+from app.routers import sample, scraper, raw_data
 from app.models.schemas import HealthResponse
+from app.database import connect_database, disconnect_database
 
 # Create FastAPI instance
 app = FastAPI(
@@ -17,6 +18,27 @@ app = FastAPI(
     description="A simple FastAPI application for the BellFlow project",
     version="1.0.0"
 )
+
+# Database connection events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connection on startup."""
+    try:
+        if connect_database():
+            print("Database connected successfully")
+        else:
+            print("Failed to connect to database")
+    except Exception as e:
+        print(f"Database connection error: {e}")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on shutdown."""
+    try:
+        disconnect_database()
+        print("Database disconnected successfully")
+    except Exception as e:
+        print(f"Database disconnection error: {e}")
 
 # Add CORS middleware
 app.add_middleware(
@@ -30,6 +52,7 @@ app.add_middleware(
 # Include routers
 app.include_router(sample.router, prefix="/api", tags=["items"])
 app.include_router(scraper.router, prefix="/v1", tags=["scraper"])
+app.include_router(raw_data.router, prefix="/api", tags=["raw-data"])
 
 
 @app.get("/", response_model=HealthResponse)

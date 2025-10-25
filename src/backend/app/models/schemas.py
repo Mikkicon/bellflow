@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import datetime
+from bson import ObjectId
 
 
 # ============================================================================
@@ -51,6 +52,10 @@ class ScraperRequest(BaseModel):
     time_limit: Optional[int] = Field(None, description="Maximum scraping time in seconds")
     scroll_delay: float = Field(0.75, description="Delay between scrolls in seconds", ge=0.1, le=5.0)
     headless: bool = Field(False, description="Run browser in headless mode")
+    engine: Optional[Literal["playwright", "brightdata"]] = Field(
+        None,
+        description="Scraping engine to use. If None, auto-selects based on platform (Threads=playwright, Twitter/LinkedIn=brightdata)"
+    )
 
     class Config:
         json_schema_extra = {
@@ -60,7 +65,8 @@ class ScraperRequest(BaseModel):
                 "post_limit": 100,
                 "time_limit": 300,
                 "scroll_delay": 0.75,
-                "headless": False
+                "headless": False,
+                "engine": None
             }
         }
 
@@ -166,3 +172,73 @@ class JobStatusResponse(BaseModel):
                 "error": None
             }
         }
+
+
+# ============================================================================
+# Raw Data Models
+# ============================================================================
+
+class RawDataBase(BaseModel):
+    """
+    Base model for raw scraped data storage.
+
+    Stores scraped posts as a single blob in the database with metadata.
+    The raw_data field contains the full ScraperResponse serialized as JSON.
+    """
+    id: str = Field(..., description="Unique identifier for the raw data entry")
+    timestamp: datetime = Field(..., description="Timestamp when the data was collected")
+    source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
+    status: str = Field(default="processing", description="Processing status of the data (processing, completed, failed)")
+    raw_data: str = Field(default="", description="JSON string of scraped posts (full ScraperResponse)")
+
+
+class RawDataCreate(RawDataBase):
+    """
+    Request model for creating raw data entries.
+
+    Used when initializing a new scraping job in the database.
+    """
+    pass
+
+
+class RawDataUpdate(BaseModel):
+    """
+    Request model for updating raw data entries.
+
+    All fields are optional to support partial updates. Used to update
+    scraping status and populate results after scraping completes.
+    """
+    source_link: Optional[str] = Field(None, min_length=1, max_length=2000)
+    status: Optional[str] = None
+    raw_data: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+
+class RawDataResponse(RawDataBase):
+    """
+    Response model for raw data queries.
+
+    Includes database-generated timestamps for tracking.
+    """
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        populate_by_name = True
+        json_encoders = {ObjectId: str}
+
+
+class RawDataListResponse(BaseModel):
+    """
+    Response model for paginated raw data list queries.
+
+    Used by list endpoints to return multiple raw data entries with pagination metadata.
+    """
+    items: List[RawDataResponse]
+    total: int
+    skip: int
+    limit: int
+
+
+# Alias for compatibility with posts_retriver.py
+PostRawDataBase = RawDataBase
