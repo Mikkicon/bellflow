@@ -4,6 +4,7 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 from bson import ObjectId
+import uuid
 
 from ..database.connector import get_collection
 from ..database.models import RawDataDocument
@@ -53,6 +54,43 @@ async def create_raw_data(
         raise HTTPException(status_code=500, detail=f"Failed to create raw data: {str(e)}")
 
 
+@router.post("/init", response_model=RawDataResponse, status_code=201)
+async def initialize_scraping(
+    source_link: str = Query(..., description="URL to scrape"),
+    collection: Collection = Depends(get_raw_data_collection)
+):
+    """
+    Initialize a new scraping job.
+
+    Creates a raw data entry with status="processing" for the given source link.
+    This endpoint is used to create a job record before scraping begins.
+    """
+    try:
+        # Create initial document
+        document = {
+            "id": str(uuid.uuid4()),
+            "timestamp": datetime.utcnow(),
+            "source_link": source_link,
+            "status": "processing",
+            "raw_data": "",
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow()
+        }
+
+        # Insert document
+        result = collection.insert_one(document)
+
+        # Fetch the created document
+        created_doc = collection.find_one({"_id": result.inserted_id})
+        if not created_doc:
+            raise HTTPException(status_code=500, detail="Failed to retrieve created document")
+
+        return RawDataResponse(**created_doc)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to initialize scraping: {str(e)}")
+
+
 @router.get("/{raw_data_id}", response_model=RawDataResponse)
 async def get_raw_data(
     raw_data_id: str,
@@ -75,6 +113,35 @@ async def get_raw_data(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve raw data: {str(e)}")
+
+
+@router.get("/{raw_data_id}/poll", response_model=RawDataResponse)
+async def poll_raw_data(
+    raw_data_id: str,
+    collection: Collection = Depends(get_raw_data_collection)
+):
+    """
+    Poll a specific raw data entry for status updates.
+
+    This endpoint is identical to the GET endpoint but provides clearer intent
+    for polling operations. Use this for checking scraping job progress.
+    """
+    try:
+        # Validate ObjectId
+        if not ObjectId.is_valid(raw_data_id):
+            raise HTTPException(status_code=400, detail="Invalid ID format")
+
+        # Find document
+        document = collection.find_one({"_id": ObjectId(raw_data_id)})
+        if not document:
+            raise HTTPException(status_code=404, detail="Raw data not found")
+
+        return RawDataResponse(**document)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to poll raw data: {str(e)}")
 
 
 @router.get("/", response_model=RawDataListResponse)
