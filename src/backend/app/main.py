@@ -1,7 +1,14 @@
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+# This must be done before importing any modules that read env vars
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from app.routers import sample
+from app.routers import sample, scraper
 from app.models.schemas import HealthResponse
 
 # Create FastAPI instance
@@ -22,6 +29,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(sample.router, prefix="/api", tags=["items"])
+app.include_router(scraper.router, prefix="/v1", tags=["scraper"])
 
 
 @app.get("/", response_model=HealthResponse)
