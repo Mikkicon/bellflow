@@ -322,11 +322,24 @@ const AnalysisPage = () => {
                             </Wrap>
                           )}
 
-                          <Separator />
+                            <Separator />
 
-                          <VStack align="stretch" spacing={2}>
-                            {renderMediaSuggestion(post.media_suggestion)}
-                            {post.rationale && (
+                            <VStack align="stretch" spacing={2}>
+                              {renderMediaSuggestion(post.media_suggestion)}
+
+                              <Button
+                                size="sm"
+                                bg="black"
+                                color="white"
+                                _hover={{ bg: "gray.800" }}
+                                _active={{ bg: "gray.900" }}
+                                fontWeight="semibold"
+                                mt={2}
+                              >
+                                Post
+                              </Button>
+
+                              {post.rationale && (
                               <Collapsible.Root
                                 open={expandedCards[index]}
                                 onOpenChange={() => toggleCard(index)}
