@@ -1,7 +1,5 @@
 from dotenv import load_dotenv
 import os
-import signal
-import sys
 
 # Load environment variables from .env file
 # This must be done before importing any modules that read env vars
@@ -13,38 +11,6 @@ from datetime import datetime
 from app.routers import tasks, scraper, raw_data
 from app.models.schemas import HealthResponse
 from app.database import connect_database, disconnect_database
-from app.scraper.session_manager import SessionManager
-
-
-# Signal handler for graceful shutdown
-def signal_handler(sig, frame):
-    """
-    Handle SIGINT (Ctrl+C) and SIGTERM signals for graceful shutdown.
-
-    This ensures that all browser sessions are properly closed and
-    profile data is saved before the application exits.
-    """
-    print("\n\n🛑 Received shutdown signal, cleaning up...")
-
-    try:
-        SessionManager.cleanup_all_sessions()
-    except Exception as e:
-        print(f"Error during session cleanup: {e}")
-
-    try:
-        disconnect_database()
-        print("Database disconnected successfully")
-    except Exception as e:
-        print(f"Database disconnection error: {e}")
-
-    print("👋 Goodbye!\n")
-    sys.exit(0)
-
-
-# Register signal handlers
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
-
 
 # Create FastAPI instance
 app = FastAPI(
@@ -67,14 +33,7 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Close database connection and cleanup browser sessions on shutdown."""
-    # Clean up active browser sessions first to ensure data is saved
-    try:
-        SessionManager.cleanup_all_sessions()
-    except Exception as e:
-        print(f"Session cleanup error: {e}")
-
-    # Then disconnect database
+    """Close database connection on shutdown."""
     try:
         disconnect_database()
         print("Database disconnected successfully")
