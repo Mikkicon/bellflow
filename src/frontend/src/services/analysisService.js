@@ -20,6 +20,7 @@ export const submitScraperRequest = async (link, options = {}) => {
   const payload = {
     url: link,
     user_id: DEFAULT_USER_ID,
+    headless: true,
     ...options,
   }
 
