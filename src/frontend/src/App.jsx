@@ -189,12 +189,17 @@ function App() {
               </Text>
               <LinkInput onAnalyze={handleAnalyze} isDisabled={status === 'processing'} />
             </VStack>
-            {status === 'processing' && (
+            {(status === 'processing' || status === 'success') && (
               <Drawer.Root>
                 <Box mt={2} textAlign="left">
                   <Drawer.Trigger asChild>
                     <Box as="span" display="inline-flex" alignItems="baseline" gap={1} lineHeight={2} cursor="pointer">
-                      <ShimmerText>Analyzing</ShimmerText>
+                      {status === 'processing' && (
+                      <ShimmerText>Analyzing</ShimmerText> )}
+                      {status === 'success' && (
+                      <Text fontSize="sm" color="var(--brand-primary)" fontWeight="semibold">
+                        View analysis timeline
+                      </Text> )}
                       <Box as={RiExpandRightLine} boxSize={4} transform="translateY(3px)" color="#999" />
                     </Box>
                   </Drawer.Trigger>
