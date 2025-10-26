@@ -121,8 +121,8 @@ class PlaywrightEngine(BaseScraperEngine):
         """
         start_time = time.time()
 
-        # Load browser session
-        context = self.session_manager.load_session(user_id, headless=headless)
+        # Load browser session (returns tuple of playwright instance, context, and session_id)
+        playwright, context, session_id = self.session_manager.load_session(user_id, headless=headless)
         page = context.pages[0] if context.pages else context.new_page()
 
         try:
@@ -203,7 +203,10 @@ class PlaywrightEngine(BaseScraperEngine):
             return result
 
         finally:
+            # Close context and playwright instance to ensure session data is persisted
             context.close()
+            playwright.stop()
+            self.session_manager.unregister_session(session_id)
 
     def _find_selector(self, page, selectors: list) -> Optional[str]:
         """Find working CSS selector from list."""

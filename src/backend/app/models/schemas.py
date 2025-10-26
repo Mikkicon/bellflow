@@ -13,12 +13,10 @@ class HealthResponse(BaseModel):
     message: str
     timestamp: datetime
 
-
 class DataResponse(BaseModel):
     """Response model for data endpoint."""
     id: str = Field(..., description="Document ID")
     analysis: Dict[str, Any] = Field(..., description="Analysis results as JSON object")
-
 
 # ============================================================================
 # Scraper Models
@@ -86,5 +84,21 @@ class ScraperResponse(BaseModel):
                     }
                 ],
                 "error": None
+            }
+        }
+
+
+class ScraperTaskResponse(BaseModel):
+    """Response model for async scraping task."""
+    task_id: str = Field(..., description="MongoDB ObjectId for polling scraping status")
+    message: str = Field(default="Scraping task started", description="Status message")
+    source_link: str = Field(..., description="URL being scraped")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "507f1f77bcf86cd799439011",
+                "message": "Scraping task started",
+                "source_link": "https://www.threads.com/@yannlecun"
             }
         }
