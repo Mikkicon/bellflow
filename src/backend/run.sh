@@ -30,8 +30,22 @@ echo "📍 API will be available at: http://localhost:8000"
 echo "📚 API documentation at: http://localhost:8000/docs"
 echo "🔍 Alternative docs at: http://localhost:8000/redoc"
 echo ""
-echo "Press Ctrl+C to stop the server"
+echo "Press Ctrl+C to stop both servers"
 echo ""
 
-# Start the FastAPI server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Trap Ctrl+C to kill both processes
+trap 'echo ""; echo "🛑 Stopping servers..."; kill $ANALYZER_PID $UVICORN_PID 2>/dev/null; exit' INT TERM
+
+# Start the analyzer in the background
+echo "🤖 Starting analyzer poller..."
+PYTHONPATH=$(pwd) python app/analyzer/agent.py &
+ANALYZER_PID=$!
+echo "✅ Analyzer started (PID: $ANALYZER_PID)"
+echo ""
+
+# Start the FastAPI server in the foreground
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+UVICORN_PID=$!
+
+# Wait for both processes
+wait
