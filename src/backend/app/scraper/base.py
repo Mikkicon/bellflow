@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Optional
 from datetime import datetime
 import time
+import asyncio
 
 
 class BasePlatformScraper(ABC):
@@ -83,7 +84,7 @@ class BasePlatformScraper(ABC):
 
         return True
 
-    def find_post_selector(self, page) -> Optional[str]:
+    async def find_post_selector(self, page) -> Optional[str]:
         """
         Try different selectors to find posts on the page.
 
@@ -97,7 +98,7 @@ class BasePlatformScraper(ABC):
 
         for selector in self.get_post_selectors():
             try:
-                count = page.evaluate(f'document.querySelectorAll({json.dumps(selector)}).length')
+                count = await page.evaluate(f'document.querySelectorAll({json.dumps(selector)}).length')
                 if count > 0:
                     return selector
             except Exception:
@@ -105,7 +106,7 @@ class BasePlatformScraper(ABC):
 
         return None
 
-    def scroll_and_load(self, page, selector: str, max_scrolls: int = 500) -> int:
+    async def scroll_and_load(self, page, selector: str, max_scrolls: int = 500) -> int:
         """
         Scroll the page to load more posts.
 
@@ -124,11 +125,11 @@ class BasePlatformScraper(ABC):
 
         for i in range(max_scrolls):
             # Scroll to bottom
-            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            time.sleep(self.scroll_delay)
+            await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(self.scroll_delay)
 
             # Count current posts
-            current_count = page.evaluate(f'document.querySelectorAll({json.dumps(selector)}).length')
+            current_count = await page.evaluate(f'document.querySelectorAll({json.dumps(selector)}).length')
             scrolls += 1
 
             # Show progress every 5 scrolls
@@ -154,7 +155,7 @@ class BasePlatformScraper(ABC):
         return current_count
 
     @abstractmethod
-    def scrape(self) -> Dict:
+    async def scrape(self) -> Dict:
         """
         Main scraping method. Must be implemented by subclasses.
 

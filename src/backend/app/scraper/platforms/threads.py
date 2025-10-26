@@ -4,6 +4,7 @@ from typing import List, Dict
 from datetime import datetime
 import time
 import json as json_module
+import asyncio
 
 from app.scraper.base import BasePlatformScraper
 from app.scraper.session_manager import SessionManager
@@ -29,7 +30,7 @@ class ThreadsScraper(BasePlatformScraper):
             'div[role="button"]',
         ]
 
-    def extract_post_data(self, page, selector: str) -> List[Dict]:
+    async def extract_post_data(self, page, selector: str) -> List[Dict]:
         """
         Extract post data from Threads page.
 
@@ -41,7 +42,7 @@ class ThreadsScraper(BasePlatformScraper):
             List of post dictionaries with text, link, likes, comments, reposts, raw_data
         """
         # First pass: extract raw data including HTML
-        raw_items = page.eval_on_selector_all(
+        raw_items = await page.eval_on_selector_all(
             selector,
             """nodes => nodes.map(n => {
                 const text = n.innerText;
@@ -85,7 +86,7 @@ class ThreadsScraper(BasePlatformScraper):
 
         return items
 
-    def scrape(self) -> Dict:
+    async def scrape(self) -> Dict:
         """
         Scrape posts from a Threads profile.
 
@@ -106,28 +107,28 @@ class ThreadsScraper(BasePlatformScraper):
         session_mgr = SessionManager()
 
         # Load browser session (returns tuple of playwright instance, context, and session_id)
-        playwright, context, session_id = session_mgr.load_session(self.user_id, headless=self.headless)
-        page = context.pages[0] if context.pages else context.new_page()
+        playwright, context, session_id = await session_mgr.load_session(self.user_id, headless=self.headless)
+        page = context.pages[0] if context.pages else await context.new_page()
 
         try:
             # Navigate to profile
             print(f"🌐 Navigating to: {self.url}")
-            page.goto(self.url, wait_until="domcontentloaded")
+            await page.goto(self.url, wait_until="domcontentloaded")
             print("⏳ Waiting for page to load...")
-            time.sleep(8)
+            await asyncio.sleep(8)
 
             # Scroll a bit to trigger lazy loading
-            page.evaluate("window.scrollTo(0, 500)")
-            time.sleep(2)
+            await page.evaluate("window.scrollTo(0, 500)")
+            await asyncio.sleep(2)
 
             # Find post selector
             print("🔍 Detecting post selector...")
-            selector = self.find_post_selector(page)
+            selector = await self.find_post_selector(page)
 
             if not selector:
                 print("❌ Could not find posts selector!")
-                context.close()
-                playwright.stop()
+                await context.close()
+                await playwright.stop()
                 session_mgr.unregister_session(session_id)
                 return {
                     'error': 'No posts found',
@@ -137,7 +138,7 @@ class ThreadsScraper(BasePlatformScraper):
                     'user_id': self.user_id
                 }
 
-            initial_count = page.evaluate(f'document.querySelectorAll({json_module.dumps(selector)}).length')
+            initial_count = await page.evaluate(f'document.querySelectorAll({json_module.dumps(selector)}).length')
             print(f"✅ Found {initial_count} posts using selector: {selector}")
 
             # Scroll to load more posts
@@ -150,11 +151,11 @@ class ThreadsScraper(BasePlatformScraper):
             limit_str = ", ".join(limits_desc) if limits_desc else "no limit"
             print(f"\n🚀 Scrolling to load posts ({limit_str})...")
 
-            final_count = self.scroll_and_load(page, selector, max_scrolls=500)
+            final_count = await self.scroll_and_load(page, selector, max_scrolls=500)
 
             # Extract post data
             print(f"\n🔍 Extracting {final_count} posts...")
-            items = self.extract_post_data(page, selector)
+            items = await self.extract_post_data(page, selector)
 
             # Apply post limit if needed
             if self.post_limit and len(items) > self.post_limit:
@@ -183,6 +184,6 @@ class ThreadsScraper(BasePlatformScraper):
 
         finally:
             # Close context and playwright instance to ensure session data is persisted
-            context.close()
-            playwright.stop()
+            await context.close()
+            await playwright.stop()
             session_mgr.unregister_session(session_id)

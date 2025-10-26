@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException
-from concurrent.futures import ThreadPoolExecutor
 import asyncio
 import json
 from datetime import datetime
@@ -11,12 +10,9 @@ from app.models.schemas import (
     ScraperTaskResponse
 )
 from app.database.models import RawDataDocument
-from app.scraper import ThreadsScraper
+from app.scraper import ThreadsScraper, XScraper
 from app.database.connector import get_collection
 import logging
-
-# Thread pool for running sync Playwright code
-executor = ThreadPoolExecutor(max_workers=4)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -188,8 +184,15 @@ async def run_scraping_task(task_id: str, request: ScraperRequest):
         # Determine platform from URL
         url_lower = request.url.lower()
 
-        if not "threads.com" in url_lower:
-            error_msg = f"Unsupported platform. Currently only Threads.com is supported. URL: {request.url}"
+        # Detect platform and select appropriate scraper
+        if "threads.com" in url_lower:
+            scraper_class = ThreadsScraper
+            platform_name = "ThreadsScraper"
+        elif "x.com" in url_lower or "twitter.com" in url_lower:
+            scraper_class = XScraper
+            platform_name = "XScraper"
+        else:
+            error_msg = f"Unsupported platform. Currently supports Threads.com and X.com (Twitter). URL: {request.url}"
             logger.error(f"[Task {task_id}] {error_msg}")
             update_scraping_task(
                 task_id=task_id,
@@ -200,8 +203,8 @@ async def run_scraping_task(task_id: str, request: ScraperRequest):
 
         # Step 1: Initialize scraper
         try:
-            logger.info(f"[Task {task_id}] Initializing ThreadsScraper")
-            scraper = ThreadsScraper(
+            logger.info(f"[Task {task_id}] Initializing {platform_name}")
+            scraper = scraper_class(
                 url=request.url,
                 user_id=request.user_id,
                 post_limit=request.post_limit,
@@ -224,8 +227,7 @@ async def run_scraping_task(task_id: str, request: ScraperRequest):
         # Step 2: Execute scraping
         try:
             logger.info(f"[Task {task_id}] Starting scraping execution")
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(executor, scraper.scrape)
+            data = await scraper.scrape()
             logger.info(f"[Task {task_id}] Scraping execution completed")
 
         except Exception as scrape_error:
@@ -317,7 +319,8 @@ async def scrape_profile(request: ScraperRequest) -> ScraperTaskResponse:
     Use GET /raw-data/{task_id}/poll to check the scraping status and retrieve results.
 
     Supports:
-    - Threads.com (async background scraping)
+    - Threads.com (async background scraping with Playwright)
+    - X.com / Twitter.com (async background scraping with Playwright)
 
     Args:
         request: ScraperRequest containing URL, user_id, and scraping parameters
@@ -429,9 +432,5 @@ async def get_background_tasks_status():
     """
     return {
         "active_tasks": len(background_tasks),
-        "executor_info": {
-            "max_workers": executor._max_workers,
-            "queue_size": executor._work_queue.qsize() if hasattr(executor, '_work_queue') else "N/A"
-        },
         "message": f"{len(background_tasks)} scraping task(s) currently running in background"
     }

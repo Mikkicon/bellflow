@@ -2,9 +2,10 @@
 
 import os
 from pathlib import Path
-from playwright.sync_api import sync_playwright, BrowserContext
+from playwright.async_api import async_playwright, BrowserContext
 import time
 import threading
+import asyncio
 
 
 class SessionManager:
@@ -91,7 +92,7 @@ class SessionManager:
             print(f"✅ Session saved for user: {user_id}")
             context.close()
 
-    def load_session(
+    async def load_session(
         self,
         user_id: str,
         headless: bool = False
@@ -110,9 +111,6 @@ class SessionManager:
             Tuple of (playwright instance, BrowserContext, session_id)
             Both playwright and context must be closed properly to ensure session persistence.
             Use unregister_session(session_id) after closing to clean up tracking.
-
-        Raises:
-            ValueError: If profile doesn't exist
         """
         profile_dir = self.get_profile_dir(user_id)
 
@@ -121,8 +119,8 @@ class SessionManager:
         else:
             print(f"📁 Creating new browser profile for user: {user_id}")
 
-        playwright = sync_playwright().start()
-        context = playwright.chromium.launch_persistent_context(
+        playwright = await async_playwright().start()
+        context = await playwright.chromium.launch_persistent_context(
             user_data_dir=str(profile_dir),
             headless=headless,
             args=['--disable-blink-features=AutomationControlled']
@@ -185,7 +183,7 @@ class SessionManager:
                 print(f"✅ Unregistered session: {session_id} (remaining: {len(self._active_sessions)})")
 
     @classmethod
-    def cleanup_all_sessions(cls) -> None:
+    async def cleanup_all_sessions(cls) -> None:
         """
         Clean up all active browser sessions.
 
@@ -208,9 +206,9 @@ class SessionManager:
                     print(f"  💾 Saving profile for user: {user_id}")
 
                     if context:
-                        context.close()
+                        await context.close()
                     if playwright:
-                        playwright.stop()
+                        await playwright.stop()
 
                     print(f"  ✅ Profile saved for user: {user_id}")
 
