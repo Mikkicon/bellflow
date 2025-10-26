@@ -38,9 +38,11 @@ trap 'echo ""; echo "🛑 Stopping servers..."; kill $ANALYZER_PID $UVICORN_PID 
 
 # Start the analyzer in the background
 echo "🤖 Starting analyzer poller..."
-PYTHONPATH=$(pwd) python app/analyzer/agent.py &
+mkdir -p logs
+PYTHONPATH=$(pwd) python app/analyzer/agent.py >> logs/analyzer.log 2>&1 &
 ANALYZER_PID=$!
 echo "✅ Analyzer started (PID: $ANALYZER_PID)"
+echo "📝 Analyzer logs: logs/analyzer.log"
 echo ""
 
 # Start the FastAPI server in the foreground
