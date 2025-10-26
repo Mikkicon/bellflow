@@ -11,13 +11,13 @@ import logging
 from bson import ObjectId
 from datetime import datetime
 from openai.types.responses import ParsedResponse
-from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage
-from langchain import hub
-from langchain_community.llms import _import_openai
-from langchain.agents import AgentExecutor, create_react_agent
+# from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
+# from langchain_openai import ChatOpenAI
+# from langchain_core.prompts import ChatPromptTemplate
+# from langchain_core.messages import AIMessage, HumanMessage
+# from langchain import hub
+# from langchain_community.llms import _import_openai
+# from langchain.agents import AgentExecutor, create_react_agent
 
 from app.analyzer.utils import LLMClient, fetch_and_prepare_news
 from app.database.connector import connect_database, get_collection
@@ -128,6 +128,7 @@ def run_agent(context: AgentContext, provider: str = "openai") -> AnalysisResult
     )
     print("\n\nnews_result")
     print(news_result)
+    news_result = news_result or {}
     # Step 3: ask LLM to produce 3 suggested posts using posts + short news summary
     final_prompt = [
         {
@@ -154,8 +155,9 @@ def run_agent(context: AgentContext, provider: str = "openai") -> AnalysisResult
     events = [
         s.model_dump() for s in response.output[0].content[0].parsed.reasoning_steps
     ]
+    titles = [ar["title"] for ar in news_result.get("articles", [])] if news_result else []
     return AnalysisResult(
-        raw=raw, final=final_text, events=events, news=[ar["title"] for ar in news_result["articles"]]
+        raw=raw, final=final_text, events=events, news=titles
     )
 
 
