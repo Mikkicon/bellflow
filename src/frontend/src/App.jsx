@@ -131,6 +131,11 @@ function App() {
       ]))
 
       const taskId = response?.task_id || null
+
+      if (null == taskId) {
+        throw new Error('No task ID returned from scraper service.')
+      }
+
       setResultId(taskId)
       
       if (taskId) {
