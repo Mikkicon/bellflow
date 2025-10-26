@@ -37,9 +37,9 @@ def create_analyzer_task(doc: dict, status: str) -> Task:
                     if isinstance(event, dict):
                         events.append(Event(
                             id=event.get("id", i + 1),
-                            name=event.get("name", f"reasoning {i + 1}"),
+                            name=event.get("name", f"Step {i + 1}"),
                             status=event.get("status", "info"),
-                            message=event.get("message", ""),
+                            message=event.get("text", ""),
                             timestamp=datetime.fromisoformat(event.get("timestamp", doc.get("timestamp", datetime.utcnow()).isoformat()))
                         ))
         except (json.JSONDecodeError, ValueError) as e:
