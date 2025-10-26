@@ -93,13 +93,13 @@ const AnalysisTimeline = ({ items = [], ...props }) => {
               {entry.description && (
                 <Timeline.Description>{entry.description}</Timeline.Description>
               )}
-              {entry.status && (
+              {/* {entry.status && (
                 <Text textStyle="sm" color="gray.500" mt={entry.message ? 1 : 0}>
                   Status: <Text as="span" fontWeight="semibold">{entry.status}</Text>
                 </Text>
-              )}
+              )} */}
               {entry.message && (
-                <Text textStyle="sm" color="gray.600" mt={entry.status ? 1 : 0}>
+                <Text textStyle="sm" color="gray.600">
                   {entry.message}
                 </Text>
               )}
