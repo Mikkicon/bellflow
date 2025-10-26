@@ -137,7 +137,7 @@ def fetch_and_prepare_news(query: str, n: int = 5, lang: str = "en") -> Dict[str
     if not api_key:
         return {"status": "error", "message": "NEWSAPI_KEY required"}
     # Set default date range: 7 days ago to today
-    from_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     to_date = datetime.now().strftime("%Y-%m-%d")
     params = {
         "q": query, 
