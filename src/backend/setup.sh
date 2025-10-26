@@ -37,6 +37,24 @@ pip install --upgrade pip
 echo "📚 Installing dependencies..."
 pip install -r requirements.txt
 
+# Install Playwright and its dependencies
+echo "🎭 Setting up Playwright..."
+if python -c "import playwright" &> /dev/null; then
+    echo "✅ Playwright already installed"
+else
+    echo "📦 Installing Playwright Python package..."
+    pip install playwright
+    echo "✅ Playwright package installed"
+fi
+
+echo "📦 Installing Playwright system dependencies..."
+python -m playwright install-deps
+
+echo "🌐 Installing Playwright browsers..."
+python -m playwright install
+
+echo "✅ Playwright setup complete"
+
 echo ""
 echo "🎉 Setup complete!"
 echo ""

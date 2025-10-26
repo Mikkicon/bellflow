@@ -13,6 +13,10 @@ class HealthResponse(BaseModel):
     message: str
     timestamp: datetime
 
+class DataResponse(BaseModel):
+    """Response model for data endpoint."""
+    id: str = Field(..., description="Document ID")
+    analysis: Dict[str, Any] = Field(..., description="Analysis results as JSON object")
 
 # ============================================================================
 # Scraper Models
@@ -43,18 +47,6 @@ class ScraperRequest(BaseModel):
                 "engine": None
             }
         }
-
-
-class PostData(BaseModel):
-    """Individual post data."""
-    text: str
-    link: Optional[str] = None
-    likes: Optional[int] = None
-    comments: Optional[int] = None
-    reposts: Optional[int] = None
-    date_posted: Optional[str] = None
-    views: Optional[int] = None
-
 
 class ScraperResponse(BaseModel):
     """Response model for scraping endpoint."""
@@ -96,71 +88,83 @@ class ScraperResponse(BaseModel):
         }
 
 
-# ============================================================================
-# Raw Data Models
-# ============================================================================
-
-class RawDataBase(BaseModel):
-    """
-    Base model for raw scraped data storage.
-
-    Stores scraped posts as a single blob in the database with metadata.
-    The raw_data field contains the full ScraperResponse serialized as JSON.
-    """
-    id: str = Field(..., description="Unique identifier for the raw data entry")
-    timestamp: datetime = Field(..., description="Timestamp when the data was collected")
-    source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
-    status: str = Field(default="processing", description="Processing status of the data (processing, completed, failed)")
-    raw_data: str = Field(default="", description="JSON string of scraped posts (full ScraperResponse)")
-
-
-class RawDataCreate(RawDataBase):
-    """
-    Request model for creating raw data entries.
-
-    Used when initializing a new scraping job in the database.
-    """
-    pass
-
-
-class RawDataUpdate(BaseModel):
-    """
-    Request model for updating raw data entries.
-
-    All fields are optional to support partial updates. Used to update
-    scraping status and populate results after scraping completes.
-    """
-    source_link: Optional[str] = Field(None, min_length=1, max_length=2000)
-    status: Optional[str] = None
-    raw_data: Optional[str] = None
-    timestamp: Optional[datetime] = None
-
-
-class RawDataResponse(RawDataBase):
-    """
-    Response model for raw data queries.
-
-    Includes database-generated timestamps for tracking.
-    """
-    created_at: datetime
-    updated_at: datetime
+class ScraperTaskResponse(BaseModel):
+    """Response model for async scraping task."""
+    task_id: str = Field(..., description="MongoDB ObjectId for polling scraping status")
+    message: str = Field(default="Scraping task started", description="Status message")
+    source_link: str = Field(..., description="URL being scraped")
 
     class Config:
-        populate_by_name = True
-        json_encoders = {ObjectId: str}
+        json_schema_extra = {
+            "example": {
+                "task_id": "507f1f77bcf86cd799439011",
+                "message": "Scraping task started",
+                "source_link": "https://www.threads.com/@yannlecun"
+            }
+        }
 
 
-class RawDataListResponse(BaseModel):
-    """
-    Response model for paginated raw data list queries.
+# ============================================================================
+# Poster Models
+# ============================================================================
 
-    Used by list endpoints to return multiple raw data entries with pagination metadata.
-    """
-    items: List[RawDataResponse]
-    total: int
-    skip: int
-    limit: int
+class PostRequest(BaseModel):
+    """Request model for posting endpoint."""
+    user_id: str = Field(..., description="User ID for browser profile isolation")
+    content: str = Field(..., description="Text content to post")
+    platform: str = Field(..., description="Platform to post to (e.g., 'x', 'threads')")
+    url: Optional[str] = Field(None, description="Optional URL to navigate to (if None, uses platform home)")
+    headless: bool = Field(False, description="Run browser in headless mode")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": "user1",
+                "content": "Hello from BellFlow API! This is a test post.",
+                "platform": "x",
+                "url": None,
+                "headless": False
+            }
+        }
 
 
-# Alias for compatibility with posts_retriver.py
-PostRawDataBase = RawDataBase
+class PostResponse(BaseModel):
+    """Response model for posting endpoint."""
+    posted_at: str
+    platform: str
+    user_id: str
+    success: bool
+    content: str
+    post_url: Optional[str] = None
+    error: Optional[str] = None
+    elapsed_time: float
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "posted_at": "20251026_143022",
+                "platform": "x",
+                "user_id": "user1",
+                "success": True,
+                "content": "Hello from BellFlow API! This is a test post.",
+                "post_url": "https://x.com/username/status/1234567890",
+                "error": None,
+                "elapsed_time": 8.5
+            }
+        }
+
+
+class PostTaskResponse(BaseModel):
+    """Response model for async posting task."""
+    task_id: str = Field(..., description="MongoDB ObjectId for polling posting status")
+    message: str = Field(default="Posting task started", description="Status message")
+    platform: str = Field(..., description="Platform being posted to")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "507f1f77bcf86cd799439011",
+                "message": "Posting task started",
+                "platform": "x"
+            }
+        }

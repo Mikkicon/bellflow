@@ -1,5 +1,7 @@
 from dotenv import load_dotenv
 import os
+import signal
+import sys
 
 # Load environment variables from .env file
 # This must be done before importing any modules that read env vars
@@ -8,9 +10,41 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from app.routers import tasks, scraper, raw_data
+from app.routers import tasks, scraper, data, poster
 from app.models.schemas import HealthResponse
 from app.database import connect_database, disconnect_database
+from app.scraper.session_manager import SessionManager
+
+
+# Signal handler for graceful shutdown
+def signal_handler(sig, frame):
+    """
+    Handle SIGINT (Ctrl+C) and SIGTERM signals for graceful shutdown.
+
+    This ensures that all browser sessions are properly closed and
+    profile data is saved before the application exits.
+    """
+    print("\n\n🛑 Received shutdown signal, cleaning up...")
+
+    try:
+        SessionManager.cleanup_all_sessions()
+    except Exception as e:
+        print(f"Error during session cleanup: {e}")
+
+    try:
+        disconnect_database()
+        print("Database disconnected successfully")
+    except Exception as e:
+        print(f"Database disconnection error: {e}")
+
+    print("👋 Goodbye!\n")
+    sys.exit(0)
+
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
+
 
 # Create FastAPI instance
 app = FastAPI(
@@ -33,7 +67,14 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Close database connection on shutdown."""
+    """Close database connection and cleanup browser sessions on shutdown."""
+    # Clean up active browser sessions first to ensure data is saved
+    try:
+        SessionManager.cleanup_all_sessions()
+    except Exception as e:
+        print(f"Session cleanup error: {e}")
+
+    # Then disconnect database
     try:
         disconnect_database()
         print("Database disconnected successfully")
@@ -50,10 +91,10 @@ app.add_middleware(
 )
 
 # Include routers
-#app.include_router(posts_analyzer.router, prefix="/api", tags=["posts_analyzer"])
-app.include_router(tasks.router, prefix="/api", tags=["tasks"])
+app.include_router(tasks.router, prefix="/v1", tags=["tasks"])
 app.include_router(scraper.router, prefix="/v1", tags=["scraper"])
-app.include_router(raw_data.router, prefix="/api", tags=["raw-data"])
+app.include_router(poster.router, prefix="/v1", tags=["poster"])
+app.include_router(data.router, prefix="/v1", tags=["data"])
 
 
 @app.get("/", response_model=HealthResponse)

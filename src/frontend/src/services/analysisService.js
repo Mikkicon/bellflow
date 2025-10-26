@@ -20,6 +20,7 @@ export const submitScraperRequest = async (link, options = {}) => {
   const payload = {
     url: link,
     user_id: DEFAULT_USER_ID,
+    headless: true,
     ...options,
   }
 
@@ -33,7 +34,39 @@ export const submitScraperRequest = async (link, options = {}) => {
       const errorMessage = backendMessage
         || (statusCode ? `Request failed with status ${statusCode}` : 'Failed to reach BellFlow API.')
 
-      throw new Error(errorMessage)
+      const requestError = new Error(errorMessage)
+      if (typeof statusCode === 'number') {
+        requestError.status = statusCode
+      }
+
+      throw requestError
+    }
+
+    throw error
+  }
+}
+
+export const fetchTaskStatus = async (taskId) => {
+  if (!taskId) {
+    throw new Error('A task ID is required before retrieving task status.')
+  }
+
+  try {
+    const { data } = await apiClient.get(`/v1/tasks/${taskId}`)
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const backendMessage = error.response?.data?.detail || error.response?.data?.message
+      const statusCode = error.response?.status
+      const errorMessage = backendMessage
+        || (statusCode ? `Request failed with status ${statusCode}` : 'Failed to reach BellFlow API.')
+
+      const requestError = new Error(errorMessage)
+      if (typeof statusCode === 'number') {
+        requestError.status = statusCode
+      }
+
+      throw requestError
     }
 
     throw error
