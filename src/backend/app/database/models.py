@@ -44,19 +44,17 @@ class BaseDocument(BaseModel):
 class RawDataDocument(BaseDocument):
     """Raw data document model for storing scraped or collected data."""
 
-    id: str = Field(..., description="Unique identifier for the raw data entry")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the data was collected")
     source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
     status: str = Field(default="retriver:processing", description="Processing status of the data")
     raw_data: str = Field(default="", description="The actual raw data content as a string")
-
     analysis: str = Field(default="", description="Analysis results or task name")
     events: str = Field(default="[]", description="JSON string containing events array")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "id": "507f1f77bcf86cd799439011",
                 "timestamp": "2023-01-01T12:00:00Z",
                 "source_link": "https://example.com/data-source",
                 "status": "retriver:processing",
