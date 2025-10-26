@@ -2,8 +2,19 @@ import { useState } from 'react'
 import { Button, Field, Input, Stack } from '@chakra-ui/react'
 import { BsClipboardDataFill } from "react-icons/bs";
 
-const LinkInput = ({ label, placeholder = 'Paste your link here...' }) => {
+const LinkInput = ({ 
+  label, 
+  placeholder = 'Paste your link here...', 
+  onAnalyze,
+  isDisabled = false
+}) => {
   const [value, setValue] = useState('')
+
+  const handleAnalyze = () => {
+    if (typeof onAnalyze === 'function') {
+      onAnalyze(value)
+    }
+  }
 
   return (
     <Field.Root>
@@ -31,6 +42,7 @@ const LinkInput = ({ label, placeholder = 'Paste your link here...' }) => {
           boxShadow="sm"
           _hover={{ boxShadow: 'md' }}
           _focus={{ boxShadow: 'outline' }}
+          disabled={isDisabled}
         />
         <Button
           bg="var(--brand-secondary)"
@@ -42,9 +54,8 @@ const LinkInput = ({ label, placeholder = 'Paste your link here...' }) => {
           w="100%"
           _hover={{ bg: 'var(--brand-secondary-hover)' }}
           _active={{ bg: 'var(--brand-secondary-hover)' }}
-          onClick={() => {
-            /* placeholder for analyze handler */
-          }}
+          disabled={isDisabled}
+          onClick={handleAnalyze}
         >
           Analyze <BsClipboardDataFill style={{ marginLeft: 2 }} />
         </Button>
