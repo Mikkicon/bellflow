@@ -5,12 +5,12 @@ from datetime import datetime
 from bson import ObjectId
 from typing import Set
 from app.models.schemas import (
-    ScraperRequest,
-    ScraperResponse,
-    ScraperTaskResponse
+    PostRequest,
+    PostResponse,
+    PostTaskResponse
 )
 from app.database.models import RawDataDocument
-from app.scraper import ThreadsScraper, XScraper
+from app.scraper.platforms.x_poster import XPoster
 from app.database.connector import get_collection
 import logging
 
@@ -25,12 +25,13 @@ router = APIRouter()
 background_tasks: Set[asyncio.Task] = set()
 
 
-def create_scraping_task(source_link: str) -> str:
+def create_posting_task(platform: str, content: str) -> str:
     """
-    Create a new scraping task in the database with status 'retriever:processing'.
+    Create a new posting task in the database with status 'poster:processing'.
 
     Args:
-        source_link: The URL to be scraped
+        platform: The platform to post to (e.g., 'x', 'threads')
+        content: The content being posted
 
     Returns:
         str: The MongoDB ObjectId as a string, or None if DB not connected
@@ -44,9 +45,9 @@ def create_scraping_task(source_link: str) -> str:
         # Create RawDataDocument with initial status
         document = RawDataDocument(
             timestamp=datetime.utcnow(),
-            source_link=source_link,
-            status="retriever:processing",
-            raw_data="",
+            source_link=f"{platform}:post",  # Indicate this is a posting task
+            status="poster:processing",
+            raw_data=json.dumps({"content": content}),
             error=None
         )
 
@@ -56,24 +57,24 @@ def create_scraping_task(source_link: str) -> str:
         # Insert into database
         result = collection.insert_one(doc_dict)
         task_id = str(result.inserted_id)
-        logger.info(f"Created scraping task with ID: {task_id}")
+        logger.info(f"Created posting task with ID: {task_id}")
         return task_id
 
     except Exception as e:
-        logger.error(f"Failed to create scraping task: {e}")
+        logger.error(f"Failed to create posting task: {e}")
         return None
 
 
-def update_scraping_task(task_id: str, status: str, scraper_response: ScraperResponse = None, error: str = None):
+def update_posting_task(task_id: str, status: str, post_response: PostResponse = None, error: str = None):
     """
-    Update a scraping task with results or error.
+    Update a posting task with results or error.
 
     This function has robust error handling and will retry on failure.
 
     Args:
         task_id: The MongoDB ObjectId as a string
-        status: New status (retriever:completed or retriever:failed)
-        scraper_response: The scraper response object (if successful)
+        status: New status (poster:completed or poster:failed)
+        post_response: The post response object (if successful)
         error: Error message (if failed)
     """
     max_retries = 3
@@ -92,12 +93,15 @@ def update_scraping_task(task_id: str, status: str, scraper_response: ScraperRes
                 "updated_at": datetime.utcnow()
             }
 
-            # Add scraper response if provided
-            if scraper_response:
+            # Add post response if provided
+            if post_response:
                 try:
-                    update_data["raw_data"] = json.dumps(scraper_response.dict(), default=str)
+                    update_data["raw_data"] = json.dumps(post_response.dict(), default=str)
+                    # Store post URL in analysis field if available
+                    if post_response.post_url:
+                        update_data["analysis"] = {"post_url": post_response.post_url}
                 except Exception as json_error:
-                    logger.error(f"Failed to serialize scraper response for task {task_id}: {json_error}")
+                    logger.error(f"Failed to serialize post response for task {task_id}: {json_error}")
                     # If serialization fails, store a simple error message
                     update_data["raw_data"] = json.dumps({"error": "Failed to serialize response"})
 
@@ -151,134 +155,128 @@ def task_done_callback(task: asyncio.Task):
     logger.debug(f"Task completed. Active background tasks: {len(background_tasks)}")
 
 
-async def run_scraping_task_wrapper(task_id: str, request: ScraperRequest):
+async def run_posting_task_wrapper(task_id: str, request: PostRequest):
     """
     Wrapper that manages the background task lifecycle.
 
     This ensures the task runs to completion independent of the HTTP request.
     """
     try:
-        await run_scraping_task(task_id, request)
+        await run_posting_task(task_id, request)
         logger.info(f"[Task {task_id}] ✓ Completed successfully")
     except Exception as e:
         logger.critical(f"[Task {task_id}] Unhandled exception in task wrapper: {e}", exc_info=True)
 
 
-async def run_scraping_task(task_id: str, request: ScraperRequest):
+async def run_posting_task(task_id: str, request: PostRequest):
     """
-    Background task that runs the actual scraping and updates the task status.
+    Background task that runs the actual posting and updates the task status.
 
     This function has comprehensive error handling to ensure all errors are
     captured and persisted to the database.
 
     Args:
         task_id: The MongoDB ObjectId of the task
-        request: The scraper request parameters
+        request: The post request parameters
     """
-    scraper = None
+    poster = None
     data = None
 
     try:
-        logger.info(f"[Task {task_id}] Starting background scraping for URL: {request.url}")
+        logger.info(f"[Task {task_id}] Starting background posting for platform: {request.platform}")
 
-        # Determine platform from URL
-        url_lower = request.url.lower()
+        # Select appropriate poster based on platform
+        platform_lower = request.platform.lower()
 
-        # Detect platform and select appropriate scraper
-        if "threads.com" in url_lower:
-            scraper_class = ThreadsScraper
-            platform_name = "ThreadsScraper"
-        elif "x.com" in url_lower or "twitter.com" in url_lower:
-            scraper_class = XScraper
-            platform_name = "XScraper"
+        if platform_lower == "x" or platform_lower == "twitter":
+            poster_class = XPoster
+            platform_name = "XPoster"
         else:
-            error_msg = f"Unsupported platform. Currently supports Threads.com and X.com (Twitter). URL: {request.url}"
+            error_msg = f"Unsupported platform. Currently supports 'x' (X.com/Twitter). Platform: {request.platform}"
             logger.error(f"[Task {task_id}] {error_msg}")
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:failed",
+                status="poster:failed",
                 error=error_msg
             )
             return
 
-        # Step 1: Initialize scraper
+        # Step 1: Initialize poster
         try:
             logger.info(f"[Task {task_id}] Initializing {platform_name}")
-            scraper = scraper_class(
-                url=request.url,
+            poster = poster_class(
                 user_id=request.user_id,
-                post_limit=request.post_limit,
-                time_limit=request.time_limit,
-                scroll_delay=request.scroll_delay,
+                content=request.content,
+                url=request.url,
                 headless=request.headless
             )
-            logger.info(f"[Task {task_id}] Scraper initialized successfully")
+            logger.info(f"[Task {task_id}] Poster initialized successfully")
 
         except Exception as init_error:
-            error_msg = f"Failed to initialize scraper: {str(init_error)}"
+            error_msg = f"Failed to initialize poster: {str(init_error)}"
             logger.error(f"[Task {task_id}] {error_msg}", exc_info=True)
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:failed",
+                status="poster:failed",
                 error=error_msg
             )
             return
 
-        # Step 2: Execute scraping
+        # Step 2: Execute posting
         try:
-            logger.info(f"[Task {task_id}] Starting scraping execution")
-            data = await scraper.scrape()
-            logger.info(f"[Task {task_id}] Scraping execution completed")
+            logger.info(f"[Task {task_id}] Starting posting execution")
+            data = await poster.post()
+            logger.info(f"[Task {task_id}] Posting execution completed")
 
-        except Exception as scrape_error:
-            error_msg = f"Scraping execution failed: {str(scrape_error)}"
+        except Exception as post_error:
+            error_msg = f"Posting execution failed: {str(post_error)}"
             logger.error(f"[Task {task_id}] {error_msg}", exc_info=True)
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:failed",
+                status="poster:failed",
                 error=error_msg
             )
             return
 
-        # Step 3: Check scraper-reported errors
+        # Step 3: Check poster-reported errors
         if not data:
-            error_msg = "Scraper returned no data"
+            error_msg = "Poster returned no data"
             logger.error(f"[Task {task_id}] {error_msg}")
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:failed",
+                status="poster:failed",
                 error=error_msg
             )
             return
 
         if "error" in data and data["error"]:
-            error_msg = f"Scraper reported error: {data['error']}"
+            error_msg = f"Poster reported error: {data['error']}"
             logger.error(f"[Task {task_id}] {error_msg}")
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:failed",
+                status="poster:failed",
                 error=data["error"]
             )
             return
 
         # Step 4: Process and save results
         try:
-            logger.info(f"[Task {task_id}] Processing results. Posts: {data.get('total_items', 0)}, Time: {data.get('elapsed_time', 0)}s")
+            logger.info(f"[Task {task_id}] Processing results. Success: {data.get('success', False)}, Time: {data.get('elapsed_time', 0)}s")
 
             # Create response object
-            response = ScraperResponse(**data)
+            response = PostResponse(**data)
 
             # Update task with success
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:completed",
-                scraper_response=response
+                status="poster:completed",
+                post_response=response
             )
 
-            logger.info(f"[Task {task_id}] ✓ Scraping completed successfully")
+            logger.info(f"[Task {task_id}] ✓ Posting completed successfully")
 
         except Exception as process_error:
-            error_msg = f"Failed to process scraping results: {str(process_error)}"
+            error_msg = f"Failed to process posting results: {str(process_error)}"
             logger.error(f"[Task {task_id}] {error_msg}", exc_info=True)
 
             # Try to save partial data if available
@@ -287,9 +285,9 @@ async def run_scraping_task(task_id: str, request: ScraperRequest):
                     "error": error_msg,
                     "partial_data": str(data)[:1000] if data else "No data"
                 }
-                update_scraping_task(
+                update_posting_task(
                     task_id=task_id,
-                    status="retriever:failed",
+                    status="poster:failed",
                     error=error_msg
                 )
             except Exception as save_error:
@@ -297,35 +295,34 @@ async def run_scraping_task(task_id: str, request: ScraperRequest):
 
     except Exception as unexpected_error:
         # Catch-all for any unexpected errors
-        error_msg = f"Unexpected error in scraping task: {str(unexpected_error)}"
+        error_msg = f"Unexpected error in posting task: {str(unexpected_error)}"
         logger.critical(f"[Task {task_id}] {error_msg}", exc_info=True)
 
         try:
-            update_scraping_task(
+            update_posting_task(
                 task_id=task_id,
-                status="retriever:failed",
+                status="poster:failed",
                 error=error_msg
             )
         except Exception as final_error:
             logger.critical(f"[Task {task_id}] CRITICAL: Failed to save final error to DB: {final_error}")
 
 
-@router.post("/scrape", response_model=ScraperTaskResponse)
-async def scrape_profile(request: ScraperRequest) -> ScraperTaskResponse:
+@router.post("/post", response_model=PostTaskResponse)
+async def post_content(request: PostRequest) -> PostTaskResponse:
     """
-    Start a scraping task (fire-and-forget).
+    Start a posting task (fire-and-forget).
 
     This endpoint immediately returns a task ID.
 
     Supports:
-    - Threads.com (async background scraping with Playwright)
-    - X.com / Twitter.com (async background scraping with Playwright)
+    - X.com / Twitter.com (async background posting with Playwright)
 
     Args:
-        request: ScraperRequest containing URL, user_id, and scraping parameters
+        request: PostRequest containing platform, user_id, content, and posting parameters
 
     Returns:
-        ScraperTaskResponse with task_id
+        PostTaskResponse with task_id
 
     Raises:
         HTTPException: If task creation fails
@@ -333,13 +330,13 @@ async def scrape_profile(request: ScraperRequest) -> ScraperTaskResponse:
     task_id = None
 
     try:
-        logger.info(f"Received scrape request - URL: {request.url}, user_id: {request.user_id}")
+        logger.info(f"Received post request - Platform: {request.platform}, user_id: {request.user_id}")
 
         # Validate request parameters
-        if not request.url or not request.url.strip():
+        if not request.platform or not request.platform.strip():
             raise HTTPException(
                 status_code=400,
-                detail="URL cannot be empty"
+                detail="Platform cannot be empty"
             )
 
         if not request.user_id or not request.user_id.strip():
@@ -348,27 +345,33 @@ async def scrape_profile(request: ScraperRequest) -> ScraperTaskResponse:
                 detail="user_id cannot be empty"
             )
 
-        # Create initial task in database with status "retriever:processing"
+        if not request.content or not request.content.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Content cannot be empty"
+            )
+
+        # Create initial task in database with status "poster:processing"
         try:
-            task_id = create_scraping_task(source_link=request.url)
+            task_id = create_posting_task(platform=request.platform, content=request.content)
         except Exception as create_error:
             logger.error(f"Failed to create task in database: {create_error}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to create scraping task: {str(create_error)}"
+                detail=f"Failed to create posting task: {str(create_error)}"
             )
 
         if not task_id:
             raise HTTPException(
                 status_code=500,
-                detail="Failed to create scraping task. Database may not be connected."
+                detail="Failed to create posting task. Database may not be connected."
             )
 
-        # Start background scraping task (fire-and-forget)
+        # Start background posting task (fire-and-forget)
         # Add to background_tasks set to prevent garbage collection
         # The task will run independently of the HTTP request lifecycle
         try:
-            task = asyncio.create_task(run_scraping_task_wrapper(task_id, request))
+            task = asyncio.create_task(run_posting_task_wrapper(task_id, request))
             background_tasks.add(task)
 
             # Add callback to clean up when task completes
@@ -380,36 +383,36 @@ async def scrape_profile(request: ScraperRequest) -> ScraperTaskResponse:
 
             # Update task status to failed
             try:
-                update_scraping_task(
+                update_posting_task(
                     task_id=task_id,
-                    status="retriever:failed",
-                    error=f"Failed to start background scraping: {str(task_error)}"
+                    status="poster:failed",
+                    error=f"Failed to start background posting: {str(task_error)}"
                 )
             except Exception as update_error:
                 logger.error(f"Failed to update task {task_id} status: {update_error}")
 
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to start background scraping task: {str(task_error)}"
+                detail=f"Failed to start background posting task: {str(task_error)}"
             )
 
-        return ScraperTaskResponse(
+        return PostTaskResponse(
             task_id=task_id,
-            message="Scraping task started.",
-            source_link=request.url
+            message="Posting task started.",
+            platform=request.platform
         )
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in scrape endpoint: {str(e)}", exc_info=True)
+        logger.error(f"Unexpected error in post endpoint: {str(e)}", exc_info=True)
 
         # Try to update task status if we have a task_id
         if task_id:
             try:
-                update_scraping_task(
+                update_posting_task(
                     task_id=task_id,
-                    status="retriever:failed",
+                    status="poster:failed",
                     error=f"Endpoint error: {str(e)}"
                 )
             except Exception as update_error:
@@ -417,19 +420,19 @@ async def scrape_profile(request: ScraperRequest) -> ScraperTaskResponse:
 
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to start scraping task: {str(e)}"
+            detail=f"Failed to start posting task: {str(e)}"
         )
 
 
 @router.get("/tasks/status")
 async def get_background_tasks_status():
     """
-    Get the status of active background scraping tasks.
+    Get the status of active background posting tasks.
 
     Returns:
         Dictionary with count of active background tasks
     """
     return {
         "active_tasks": len(background_tasks),
-        "message": f"{len(background_tasks)} scraping task(s) currently running in background"
+        "message": f"{len(background_tasks)} posting task(s) currently running in background"
     }

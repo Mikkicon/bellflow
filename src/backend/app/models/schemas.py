@@ -102,3 +102,69 @@ class ScraperTaskResponse(BaseModel):
                 "source_link": "https://www.threads.com/@yannlecun"
             }
         }
+
+
+# ============================================================================
+# Poster Models
+# ============================================================================
+
+class PostRequest(BaseModel):
+    """Request model for posting endpoint."""
+    user_id: str = Field(..., description="User ID for browser profile isolation")
+    content: str = Field(..., description="Text content to post")
+    platform: str = Field(..., description="Platform to post to (e.g., 'x', 'threads')")
+    url: Optional[str] = Field(None, description="Optional URL to navigate to (if None, uses platform home)")
+    headless: bool = Field(False, description="Run browser in headless mode")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": "user1",
+                "content": "Hello from BellFlow API! This is a test post.",
+                "platform": "x",
+                "url": None,
+                "headless": False
+            }
+        }
+
+
+class PostResponse(BaseModel):
+    """Response model for posting endpoint."""
+    posted_at: str
+    platform: str
+    user_id: str
+    success: bool
+    content: str
+    post_url: Optional[str] = None
+    error: Optional[str] = None
+    elapsed_time: float
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "posted_at": "20251026_143022",
+                "platform": "x",
+                "user_id": "user1",
+                "success": True,
+                "content": "Hello from BellFlow API! This is a test post.",
+                "post_url": "https://x.com/username/status/1234567890",
+                "error": None,
+                "elapsed_time": 8.5
+            }
+        }
+
+
+class PostTaskResponse(BaseModel):
+    """Response model for async posting task."""
+    task_id: str = Field(..., description="MongoDB ObjectId for polling posting status")
+    message: str = Field(default="Posting task started", description="Status message")
+    platform: str = Field(..., description="Platform being posted to")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "507f1f77bcf86cd799439011",
+                "message": "Posting task started",
+                "platform": "x"
+            }
+        }
