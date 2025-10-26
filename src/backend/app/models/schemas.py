@@ -96,31 +96,37 @@ class ScraperResponse(BaseModel):
         }
 
 
+class ScraperTaskResponse(BaseModel):
+    """Response model for async scraping task."""
+    task_id: str = Field(..., description="MongoDB ObjectId for polling scraping status")
+    message: str = Field(default="Scraping task started", description="Status message")
+    source_link: str = Field(..., description="URL being scraped")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "507f1f77bcf86cd799439011",
+                "message": "Scraping task started",
+                "source_link": "https://www.threads.com/@yannlecun"
+            }
+        }
+
+
 # ============================================================================
 # Raw Data Models
 # ============================================================================
 
-class RawDataBase(BaseModel):
-    """
-    Base model for raw scraped data storage.
-
-    Stores scraped posts as a single blob in the database with metadata.
-    The raw_data field contains the full ScraperResponse serialized as JSON.
-    """
-    id: str = Field(..., description="Unique identifier for the raw data entry")
-    timestamp: datetime = Field(..., description="Timestamp when the data was collected")
-    source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
-    status: str = Field(default="processing", description="Processing status of the data (processing, completed, failed)")
-    raw_data: str = Field(default="", description="JSON string of scraped posts (full ScraperResponse)")
-
-
-class RawDataCreate(RawDataBase):
+class RawDataCreate(BaseModel):
     """
     Request model for creating raw data entries.
 
     Used when initializing a new scraping job in the database.
     """
-    pass
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the data was collected")
+    source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
+    status: str = Field(default="processing", description="Processing status of the data (processing, completed, failed)")
+    raw_data: str = Field(default="", description="JSON string of scraped posts (full ScraperResponse)")
+    error: Optional[str] = Field(None, description="Error message if scraping failed")
 
 
 class RawDataUpdate(BaseModel):
@@ -130,20 +136,28 @@ class RawDataUpdate(BaseModel):
     All fields are optional to support partial updates. Used to update
     scraping status and populate results after scraping completes.
     """
+    timestamp: Optional[datetime] = None
     source_link: Optional[str] = Field(None, min_length=1, max_length=2000)
     status: Optional[str] = None
     raw_data: Optional[str] = None
-    timestamp: Optional[datetime] = None
+    error: Optional[str] = None
 
 
-class RawDataResponse(RawDataBase):
+class RawDataResponse(BaseModel):
     """
     Response model for raw data queries.
 
-    Includes database-generated timestamps for tracking.
+    Includes all fields from RawDataDocument plus MongoDB metadata.
+    The id field is the MongoDB ObjectId converted to string.
     """
-    created_at: datetime
-    updated_at: datetime
+    id: str = Field(..., description="MongoDB document ID (ObjectId as string)")
+    timestamp: datetime = Field(..., description="Timestamp when the data was collected")
+    source_link: str = Field(..., description="URL or link to the source data")
+    status: str = Field(..., description="Processing status of the data (processing, completed, failed)")
+    raw_data: str = Field(..., description="JSON string of scraped posts (full ScraperResponse)")
+    error: Optional[str] = Field(None, description="Error message if scraping failed")
+    created_at: datetime = Field(..., description="Timestamp when document was created in database")
+    updated_at: datetime = Field(..., description="Timestamp when document was last updated")
 
     class Config:
         populate_by_name = True
@@ -160,7 +174,3 @@ class RawDataListResponse(BaseModel):
     total: int
     skip: int
     limit: int
-
-
-# Alias for compatibility with posts_retriver.py
-PostRawDataBase = RawDataBase

@@ -4,7 +4,6 @@ from pymongo.collection import Collection
 from pymongo.errors import DuplicateKeyError
 from datetime import datetime
 from bson import ObjectId
-import uuid
 
 from ..database.connector import get_collection
 from ..database.models import RawDataDocument
@@ -16,6 +15,12 @@ from ..models.schemas import (
 )
 
 router = APIRouter(prefix="/raw-data", tags=["raw-data"])
+
+
+def doc_to_response(doc: Dict[str, Any]) -> RawDataResponse:
+    """Convert MongoDB document to RawDataResponse by converting _id to id string."""
+    doc["id"] = str(doc.pop("_id"))
+    return RawDataResponse(**doc)
 
 
 def get_raw_data_collection() -> Collection:
@@ -33,20 +38,21 @@ async def create_raw_data(
 ):
     """Create a new raw data entry."""
     try:
-        # Convert to document format
-        document = raw_data.dict()
-        document["created_at"] = datetime.utcnow()
-        document["updated_at"] = datetime.utcnow()
+        # Create RawDataDocument instance
+        document = RawDataDocument(**raw_data.dict())
+
+        # Convert to dict for MongoDB insertion
+        doc_dict = document.dict(by_alias=True)
 
         # Insert document
-        result = collection.insert_one(document)
+        result = collection.insert_one(doc_dict)
 
         # Fetch the created document
         created_doc = collection.find_one({"_id": result.inserted_id})
         if not created_doc:
             raise HTTPException(status_code=500, detail="Failed to retrieve created document")
 
-        return RawDataResponse(**created_doc)
+        return doc_to_response(created_doc)
 
     except DuplicateKeyError:
         raise HTTPException(status_code=400, detail="Document with this ID already exists")
@@ -66,26 +72,27 @@ async def initialize_scraping(
     This endpoint is used to create a job record before scraping begins.
     """
     try:
-        # Create initial document
-        document = {
-            "id": str(uuid.uuid4()),
-            "timestamp": datetime.utcnow(),
-            "source_link": source_link,
-            "status": "processing",
-            "raw_data": "",
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
-        }
+        # Create RawDataDocument instance
+        document = RawDataDocument(
+            timestamp=datetime.utcnow(),
+            source_link=source_link,
+            status="processing",
+            raw_data="",
+            error=None
+        )
+
+        # Convert to dict for MongoDB insertion
+        doc_dict = document.dict(by_alias=True)
 
         # Insert document
-        result = collection.insert_one(document)
+        result = collection.insert_one(doc_dict)
 
         # Fetch the created document
         created_doc = collection.find_one({"_id": result.inserted_id})
         if not created_doc:
             raise HTTPException(status_code=500, detail="Failed to retrieve created document")
 
-        return RawDataResponse(**created_doc)
+        return doc_to_response(created_doc)
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to initialize scraping: {str(e)}")
@@ -107,7 +114,7 @@ async def get_raw_data(
         if not document:
             raise HTTPException(status_code=404, detail="Raw data not found")
 
-        return RawDataResponse(**document)
+        return doc_to_response(document)
 
     except HTTPException:
         raise
@@ -136,7 +143,7 @@ async def poll_raw_data(
         if not document:
             raise HTTPException(status_code=404, detail="Raw data not found")
 
-        return RawDataResponse(**document)
+        return doc_to_response(document)
 
     except HTTPException:
         raise
@@ -148,7 +155,7 @@ async def poll_raw_data(
 async def list_raw_data(
     skip: int = Query(0, ge=0, description="Number of documents to skip"),
     limit: int = Query(10, ge=1, le=100, description="Number of documents to return"),
-    link_filter: Optional[str] = Query(None, description="Filter by link containing this string"),
+    link_filter: Optional[str] = Query(None, description="Filter by source_link containing this string"),
     collection: Collection = Depends(get_raw_data_collection)
 ):
     """List raw data entries with optional filtering and pagination."""
@@ -156,7 +163,7 @@ async def list_raw_data(
         # Build filter query
         filter_query = {}
         if link_filter:
-            filter_query["link"] = {"$regex": link_filter, "$options": "i"}
+            filter_query["source_link"] = {"$regex": link_filter, "$options": "i"}
 
         # Get total count
         total_count = collection.count_documents(filter_query)
@@ -166,7 +173,7 @@ async def list_raw_data(
         documents = list(cursor)
 
         # Convert to response format
-        raw_data_list = [RawDataResponse(**doc) for doc in documents]
+        raw_data_list = [doc_to_response(doc.copy()) for doc in documents]
 
         return RawDataListResponse(
             items=raw_data_list,
@@ -196,8 +203,10 @@ async def update_raw_data(
         if not existing_doc:
             raise HTTPException(status_code=404, detail="Raw data not found")
 
-        # Prepare update data
+        # Prepare update data (only non-None fields)
         update_data = raw_data_update.dict(exclude_unset=True)
+
+        # Always update the updated_at timestamp
         update_data["updated_at"] = datetime.utcnow()
 
         # Update document
@@ -206,12 +215,13 @@ async def update_raw_data(
             {"$set": update_data}
         )
 
-        if result.modified_count == 0:
+        if result.modified_count == 0 and len(update_data) > 1:
+            # Only raise error if there was actual data to update (beyond updated_at)
             raise HTTPException(status_code=500, detail="Failed to update document")
 
         # Fetch updated document
         updated_doc = collection.find_one({"_id": ObjectId(raw_data_id)})
-        return RawDataResponse(**updated_doc)
+        return doc_to_response(updated_doc)
 
     except HTTPException:
         raise
@@ -258,8 +268,8 @@ async def get_raw_data_stats(
         # Get collection stats
         total_documents = collection.count_documents({})
 
-        # Get unique links count
-        unique_links = len(collection.distinct("link"))
+        # Get unique source_links count
+        unique_links = len(collection.distinct("source_link"))
 
         # Get date range
         date_pipeline = [

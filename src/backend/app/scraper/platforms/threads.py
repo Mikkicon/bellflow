@@ -105,8 +105,8 @@ class ThreadsScraper(BasePlatformScraper):
         # Initialize session manager
         session_mgr = SessionManager()
 
-        # Load browser session
-        context = session_mgr.load_session(self.user_id, headless=self.headless)
+        # Load browser session (returns tuple of playwright instance, context, and session_id)
+        playwright, context, session_id = session_mgr.load_session(self.user_id, headless=self.headless)
         page = context.pages[0] if context.pages else context.new_page()
 
         try:
@@ -127,6 +127,8 @@ class ThreadsScraper(BasePlatformScraper):
             if not selector:
                 print("❌ Could not find posts selector!")
                 context.close()
+                playwright.stop()
+                session_mgr.unregister_session(session_id)
                 return {
                     'error': 'No posts found',
                     'scraped_at': datetime.now().strftime("%Y%m%d_%H%M%S"),
@@ -180,4 +182,7 @@ class ThreadsScraper(BasePlatformScraper):
             return result
 
         finally:
+            # Close context and playwright instance to ensure session data is persisted
             context.close()
+            playwright.stop()
+            session_mgr.unregister_session(session_id)
