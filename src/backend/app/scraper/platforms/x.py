@@ -134,6 +134,13 @@ class XScraper(BasePlatformScraper):
         # Initialize session manager
         session_mgr = SessionManager()
 
+        # Debug: Check profile path
+        profile_path = session_mgr.get_profile_dir(self.user_id)
+        profile_exists = session_mgr.profile_exists(self.user_id)
+        print(f"🔍 [SCRAPER] Profile path: {profile_path}")
+        print(f"🔍 [SCRAPER] Profile exists: {profile_exists}")
+        print(f"🔍 [SCRAPER] user_id: {self.user_id}")
+
         # Load browser session (returns tuple of playwright instance, context, and session_id)
         playwright, context, session_id = await session_mgr.load_session(self.user_id, headless=self.headless)
         page = context.pages[0] if context.pages else await context.new_page()

@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from playwright.async_api import async_playwright, BrowserContext
+from playwright.sync_api import sync_playwright
 import time
 import threading
 import asyncio
