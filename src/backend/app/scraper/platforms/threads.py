@@ -38,14 +38,15 @@ class ThreadsScraper(BasePlatformScraper):
             selector: CSS selector for posts
 
         Returns:
-            List of post dictionaries with text, link, likes, comments, reposts
+            List of post dictionaries with text, link, likes, comments, reposts, raw_data
         """
-        # First pass: extract raw data
+        # First pass: extract raw data including HTML
         raw_items = page.eval_on_selector_all(
             selector,
             """nodes => nodes.map(n => {
                 const text = n.innerText;
                 const link = n.querySelector('a')?.href;
+                const html = n.innerHTML;
 
                 // Extract all standalone numbers from text (engagement metrics)
                 const textLines = text.split('\\n').filter(line => line.trim());
@@ -54,6 +55,7 @@ class ThreadsScraper(BasePlatformScraper):
                 return {
                     text: text,
                     link: link,
+                    html: html,
                     raw_numbers: numbers
                 };
             })"""
@@ -67,7 +69,8 @@ class ThreadsScraper(BasePlatformScraper):
                 'link': raw_item['link'],
                 'likes': None,
                 'comments': None,
-                'reposts': None
+                'reposts': None,
+                'raw_data': raw_item.get('html', '')
             }
 
             # The last 3-4 numbers in text are usually: likes, comments, reposts, (shares/other)
