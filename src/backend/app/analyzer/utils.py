@@ -10,8 +10,11 @@ from vertexai.generative_models import GenerativeModel, GenerationConfig
 import vertexai
 
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv(dotenv_path="../.env")
+# Load .env from the backend directory (2 levels up from this file)
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(dotenv_path=env_path)
 vertexai.init(project="bellflow", location="us-central1")
 
 
