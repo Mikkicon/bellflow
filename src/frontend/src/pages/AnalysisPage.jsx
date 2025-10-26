@@ -20,7 +20,7 @@ import {
 } from '@chakra-ui/react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { useState } from 'react'
-import { FiFileText, FiFilm, FiImage, FiVideo, FiChevronDown } from 'react-icons/fi'
+import { FiFileText, FiFilm, FiImage, FiVideo, FiChevronDown, FiHeart, FiMessageCircle, FiRepeat } from 'react-icons/fi'
 import sampleAnalysisResponse from '../data/sampleAnalysisResponse.json'
 
 const mediaIconMap = {
@@ -55,6 +55,21 @@ const AnalysisPage = () => {
     }))
   }
 
+  const generateEngagementMetrics = () => {
+    return {
+      likes: Math.floor(Math.random() * 5000) + 100,
+      comments: Math.floor(Math.random() * 500) + 10,
+      reposts: Math.floor(Math.random() * 200) + 5
+    }
+  }
+
+  const formatCount = (count) => {
+    if (count >= 1000) {
+      return (count / 1000).toFixed(1) + 'k'
+    }
+    return count.toString()
+  }
+
   const renderPredictedEngagementBadge = (level) => {
     const normalizedLevel = typeof level === 'string' ? level.toLowerCase() : ''
     const colorScheme = engagementColorMap[normalizedLevel] || 'gray'
@@ -69,14 +84,40 @@ const AnalysisPage = () => {
   const renderMediaSuggestion = (media) => {
     const normalizedMedia = typeof media === 'string' ? media.toLowerCase() : ''
     const MediaIcon = mediaIconMap[normalizedMedia] || FiFileText
+    const metrics = generateEngagementMetrics()
 
     return (
-      <HStack spacing={1.5} color="gray.500">
-        <Icon as={MediaIcon} boxSize={4} />
-        <Text fontSize="xs" fontWeight="medium" textTransform="capitalize">
-          {normalizedMedia || 'Not specified'}
-        </Text>
-      </HStack>
+      <VStack align="stretch" spacing={2}>
+        <HStack spacing={1.5} color="gray.500">
+          <Icon as={MediaIcon} boxSize={4} />
+          <Text fontSize="xs" fontWeight="medium" textTransform="capitalize">
+            {normalizedMedia || 'Not specified'}
+          </Text>
+        </HStack>
+
+        <HStack spacing={4} justify="space-between">
+          <HStack spacing={1} color="gray.500">
+            <Icon as={FiHeart} boxSize={3} />
+            <Text fontSize="xs" fontWeight="medium">
+              {formatCount(metrics.likes)}
+            </Text>
+          </HStack>
+
+          <HStack spacing={1} color="gray.500">
+            <Icon as={FiMessageCircle} boxSize={3} />
+            <Text fontSize="xs" fontWeight="medium">
+              {formatCount(metrics.comments)}
+            </Text>
+          </HStack>
+
+          <HStack spacing={1} color="gray.500">
+            <Icon as={FiRepeat} boxSize={3} />
+            <Text fontSize="xs" fontWeight="medium">
+              {formatCount(metrics.reposts)}
+            </Text>
+          </HStack>
+        </HStack>
+      </VStack>
     )
   }
 
@@ -100,7 +141,15 @@ const AnalysisPage = () => {
               <Text as="span" fontWeight="semibold">{id}</Text>
             </Text>
           </VStack>
-          <Button as={RouterLink} to="/" size="sm" variant="outline">
+          <Button
+            as={RouterLink}
+            to="/"
+            size="sm"
+            bg="black"
+            color="white"
+            _hover={{ bg: "gray.800" }}
+            _active={{ bg: "gray.900" }}
+          >
             Run another analysis
           </Button>
         </HStack>
@@ -143,21 +192,22 @@ const AnalysisPage = () => {
                   const mediaLabel = capitalize(post?.media_suggestion) || 'Content'
 
                   return (
-                    <Card.Root
-                      key={`${post.media_suggestion}-${index}`}
-                      size="sm"
-                      variant="outline"
-                      minW={{ base: '100%', lg: '300px' }}
-                      maxW={{ base: '100%', lg: '400px' }}
-                      flex="1"
-                      w="full"
-                      _hover={{
-                        borderColor: 'gray.300',
-                        boxShadow: 'lg',
-                        transform: 'translateY(-2px)'
-                      }}
-                      transition="all 0.2s ease"
-                    >
+                     <Card.Root
+                       key={`${post.media_suggestion}-${index}`}
+                       size="sm"
+                       variant="outline"
+                       minW={{ base: '100%', lg: '300px' }}
+                       maxW={{ base: '100%', lg: '400px' }}
+                       flex="1"
+                       w="full"
+                       boxShadow="0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
+                       _hover={{
+                         borderColor: 'gray.300',
+                         boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 12px 20px -8px rgba(0, 0, 0, 0.1)',
+                         transform: 'translateY(-4px)'
+                       }}
+                       transition="all 0.3s ease"
+                     >
                       <CardHeader pb={3}>
                         <VStack align="stretch" gap={3}>
                           <HStack justify="space-between" align="flex-start">
