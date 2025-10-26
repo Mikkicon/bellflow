@@ -1,66 +1,37 @@
 import { useState } from 'react'
 import { Box, Center, Heading, Text, VStack, Drawer, Portal, CloseButton } from '@chakra-ui/react'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
 import LinkInput from './components/LinkInput'
 import ShimmerText from './components/ui/shimmerText/ShimmerText'
 import { RiExpandRightLine } from "react-icons/ri";
 import StatusBanner from './components/StatusBanner'
 import AnalysisTimeline from './components/AnalysisTimeline'
-
-const demoTimelineData = [
-  {
-    id: 'task-001',
-    request_id: '4489028f-ab79-4765-b256-ce7d343ba453',
-    name: 'Data Retriving',
-    message: 'Process customer data for analytics',
-    status: 'completed',
-    timestamp: '2024-01-15T10:45:00',
-    events: [],
-  },
-  {
-    id: 'task-002',
-    request_id: '4489028f-ab79-4765-b256-ce7d343ba453',
-    name: 'Data Analysis',
-    message: '',
-    status: 'pending',
-    timestamp: '2024-01-15T10:45:00',
-    events: [
-      {
-        id: 1,
-        name: 'reasoning 1',
-        status: 'info',
-        message: 'Task initialization completed',
-        timestamp: '2024-01-15T10:30:00',
-      },
-      {
-        id: 2,
-        name: 'reasoning 2',
-        status: 'success',
-        message: 'Task completed successfully',
-        timestamp: '2024-01-15T10:45:00',
-      },
-    ],
-  },
-]
+import { demoTimelineData } from './data/demoTimelineData'
 
 function App() {
   const [status, setStatus] = useState('idle') // 'idle' | 'processing' | 'success' | 'error'
   const [errorMsg, setErrorMsg] = useState('')
   const [resultId, setResultId] = useState(null)
   const [timelineItems, setTimelineItems] = useState([])
+  const navigate = useNavigate()
 
   const handleAnalyze = async (link) => {
     console.log('Analyzing link:', link)
     setStatus('processing')
     setErrorMsg('')
     setTimelineItems([])
+    setResultId(null)
 
     try {
       // TODO: wire up the real analysis call here
       // Example: const { id } = await analyzeLink(link)
       // setResultId(id)
       // setStatus('success')
+      const dummyResultId = 'analysis-123456'
       setTimelineItems(demoTimelineData)
+      setResultId(dummyResultId)
+      setStatus('success')
       // Temporary demo success to show UI
       // setTimeout(() => {
       //   setTimelineItems(demoTimelineData)
@@ -77,9 +48,11 @@ function App() {
   }
 
   const handleViewResults = () => {
-    // TODO: navigate to a results route/page
-    // e.g., navigate(`/results/${resultId}`)
-    console.log('Go to results:', resultId)
+    if (!resultId) {
+      return
+    }
+
+    navigate(`/analysis/${resultId}`)
   }
   
   return (
