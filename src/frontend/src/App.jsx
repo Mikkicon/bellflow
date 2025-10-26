@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Center, Heading, Text, VStack, Drawer, Portal, CloseButton } from '@chakra-ui/react'
 import './App.css'
 import LinkInput from './components/LinkInput'
@@ -6,15 +6,90 @@ import ShimmerText from './components/ui/shimmerText/ShimmerText'
 import { RiExpandRightLine } from "react-icons/ri";
 import StatusBanner from './components/StatusBanner'
 import AnalysisTimeline from './components/AnalysisTimeline'
-import submitScraperRequest from './services/analysisService'
+import submitScraperRequest, { fetchTaskStatus } from './services/analysisService'
 
 function App() {
   const [status, setStatus] = useState('idle') // 'idle' | 'processing' | 'success' | 'error'
   const [errorMsg, setErrorMsg] = useState('')
   const [resultId, setResultId] = useState(null)
   const [timelineItems, setTimelineItems] = useState([])
+  const pollingRef = useRef(null)
+
+  const stopTaskPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }
+
+  // clear polling on unmount
+  useEffect(() => {
+    return () => {
+      stopTaskPolling()
+    }
+  }, [])
+
+  const startTaskPolling = (taskId) => {
+    if (!taskId) {
+      return
+    }
+
+    stopTaskPolling()
+    let isPolling = false
+
+    const poll = async () => {
+      if (isPolling) {
+        return
+      }
+
+      isPolling = true
+
+      try {
+        const tasks = await fetchTaskStatus(taskId)
+
+        if (Array.isArray(tasks)) {
+          setTimelineItems((previous) => {
+            const baseItems = previous.filter((item) => item.id === 'submission' || item.id === 'task-created')
+            return baseItems.concat(tasks)
+          })
+
+          const hasFailure = tasks.some((task) => (task.status || '').toLowerCase() === 'failed' || (task.status || '').toLowerCase() === 'error')
+          if (hasFailure) {
+            setErrorMsg('Analysis task failed. Please try again.')
+            setStatus('error')
+            stopTaskPolling()
+            return
+          }
+
+          const analyzerTask = tasks.find((task) => task.id?.startsWith('analyzer') || task.name === 'Data Analysis')
+          if (analyzerTask?.status?.toLowerCase() === 'completed') {
+            setStatus('success')
+            stopTaskPolling()
+          }
+        }
+      } catch (error) {
+        if (error?.status === 404) {
+          // Task not yet available; keep polling silently
+          return
+        }
+
+        console.error('Failed to fetch task status', error)
+        setErrorMsg(error?.message || 'Failed to fetch task status.')
+        setStatus('error')
+        stopTaskPolling()
+      } finally {
+        isPolling = false
+      }
+    }
+
+    poll()
+    pollingRef.current = setInterval(() => {
+      poll()
+    }, 5000)
+  }
 
   const handleAnalyze = async (link) => {
+    stopTaskPolling()
     const normalizedLink = typeof link === 'string' ? link.trim() : ''
 
     if (!normalizedLink) {
@@ -55,11 +130,22 @@ function App() {
         },
       ]))
 
-      setResultId(response?.task_id || null)
+      const taskId = response?.task_id || null
+
+      if (null == taskId) {
+        throw new Error('No task ID returned from scraper service.')
+      }
+
+      setResultId(taskId)
+      
+      if (taskId) {
+        startTaskPolling(taskId)
+      }
     } catch (e) {
       console.error(e)
       setErrorMsg(e?.message || 'Something went wrong. Please try again.')
       setStatus('error')
+      stopTaskPolling()
     }
   }
 
@@ -103,12 +189,17 @@ function App() {
               </Text>
               <LinkInput onAnalyze={handleAnalyze} isDisabled={status === 'processing'} />
             </VStack>
-            {status === 'processing' && (
+            {(status === 'processing' || status === 'success') && (
               <Drawer.Root>
                 <Box mt={2} textAlign="left">
                   <Drawer.Trigger asChild>
                     <Box as="span" display="inline-flex" alignItems="baseline" gap={1} lineHeight={2} cursor="pointer">
-                      <ShimmerText>Analyzing</ShimmerText>
+                      {status === 'processing' && (
+                      <ShimmerText>Analyzing</ShimmerText> )}
+                      {status === 'success' && (
+                      <Text fontSize="sm" color="var(--brand-primary)" fontWeight="semibold">
+                        View analysis timeline
+                      </Text> )}
                       <Box as={RiExpandRightLine} boxSize={4} transform="translateY(3px)" color="#999" />
                     </Box>
                   </Drawer.Trigger>
