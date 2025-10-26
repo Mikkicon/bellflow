@@ -346,37 +346,46 @@ const AnalysisPage = () => {
                   const mediaLabel = capitalize(post?.media_suggestion || post?.media_type) || 'Content'
 
                   return (
-                    <Card.Root
+                    <Box
                       key={postKey}
-                      size="sm"
-                      variant="outline"
+                      flex="1"
                       minW={{ base: '100%', lg: '300px' }}
                       maxW={{ base: '100%', lg: '400px' }}
-                      flex="1"
                       w="full"
-                      boxShadow="0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
-                      _hover={{
-                        borderColor: 'gray.300',
-                        boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 12px 20px -8px rgba(0, 0, 0, 0.1)',
-                        transform: 'translateY(-4px)'
-                      }}
-                      transition="all 0.3s ease"
+                      pt={2}
+                      pb={2}
+                      position="relative"
                     >
-                      <CardHeader pb={3}>
-                        <VStack align="stretch" gap={3}>
-                          <HStack justify="space-between" align="flex-start">
-                            <VStack align="flex-start" spacing={1}>
-                              <Text fontSize="xs" color="gray.500" fontWeight="medium">
-                                IDEA {index + 1}
-                              </Text>
-                              <Text fontWeight="bold" color="gray.800" fontSize="sm">
-                                {mediaLabel} Focus
-                              </Text>
-                            </VStack>
-                            {engagementLevel && renderPredictedEngagementBadge(engagementLevel)}
-                          </HStack>
-                        </VStack>
-                      </CardHeader>
+                      <Card.Root
+                        size="sm"
+                        variant="outline"
+                        w="full"
+                        boxShadow="0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
+                        position="relative"
+                        zIndex={expandedCards[index] ? 3 : 0}
+                        _hover={{
+                          borderColor: 'gray.300',
+                          boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 12px 20px -8px rgba(0, 0, 0, 0.1)',
+                          transform: 'translateY(-4px)',
+                          zIndex: 3
+                        }}
+                        transition="all 0.3s ease"
+                      >
+                        <CardHeader pb={3}>
+                          <VStack align="stretch" gap={3}>
+                            <HStack justify="space-between" align="flex-start">
+                              <VStack align="flex-start" spacing={1}>
+                                <Text fontSize="xs" color="gray.500" fontWeight="medium">
+                                  IDEA {index + 1}
+                                </Text>
+                                <Text fontWeight="bold" color="gray.800" fontSize="sm">
+                                  {mediaLabel} Focus
+                                </Text>
+                              </VStack>
+                              {engagementLevel && renderPredictedEngagementBadge(engagementLevel)}
+                            </HStack>
+                          </VStack>
+                        </CardHeader>
 
                       <CardBody pt={0}>
                         <VStack align="stretch" gap={4}>
@@ -490,7 +499,8 @@ const AnalysisPage = () => {
                           </VStack>
                         </VStack>
                       </CardBody>
-                    </Card.Root>
+                      </Card.Root>
+                    </Box>
                   )
                 })}
               </Flex>
