@@ -1,8 +1,47 @@
+import { useState } from 'react'
 import { Box, Center, Heading, Text, VStack } from '@chakra-ui/react'
 import './App.css'
 import LinkInput from './components/LinkInput'
+import ShimmerText from './components/ui/shimmerText/ShimmerText'
+import { RiExpandRightLine } from "react-icons/ri";
+import StatusBanner from './components/StatusBanner'
 
 function App() {
+  const [status, setStatus] = useState('idle') // 'idle' | 'processing' | 'success' | 'error'
+  const [errorMsg, setErrorMsg] = useState('')
+  const [resultId, setResultId] = useState(null)
+
+  const handleAnalyze = async (link) => {
+    console.log('Analyzing link:', link)
+    setStatus('processing')
+    setErrorMsg('')
+
+    try {
+      // TODO: wire up the real analysis call here
+      // Example: const { id } = await analyzeLink(link)
+      // setResultId(id)
+      // setStatus('success')
+
+      // Temporary demo success to show UI
+      setTimeout(() => {
+        setResultId('demo-id')
+        setStatus('success')
+      }, 1000)
+    } catch (e) {
+      console.error(e)
+      setErrorMsg(e?.message || 'Something went wrong. Please try again.')
+      setStatus('error')
+    } finally {
+      // no-op; status managed above
+    }
+  }
+
+  const handleViewResults = () => {
+    // TODO: navigate to a results route/page
+    // e.g., navigate(`/results/${resultId}`)
+    console.log('Go to results:', resultId)
+  }
+  
   return (
     <Box minH="100vh" bg="gray.50">
       <Center minH="100vh" px={{ base: 6, md: 12 }}>
@@ -35,8 +74,36 @@ function App() {
               <Text fontSize="md" color="gray.600" textAlign="left">
                 Enter profile URL to start your analysis
               </Text>
-              <LinkInput />
+              <LinkInput onAnalyze={handleAnalyze} isDisabled={status === 'processing'} />
             </VStack>
+            {status === 'processing' && (
+              <Box mt={2} textAlign="left">
+                <Box as="span" display="inline-flex" alignItems="baseline" gap={1} lineHeight={2} cursor="pointer">
+                  <ShimmerText>Analyzing</ShimmerText>
+                  <Box as={RiExpandRightLine} boxSize={4} transform="translateY(3px)" color="#999" />
+                </Box>
+              </Box>
+            )}
+            {status === 'success' && (
+              <StatusBanner
+                type="success"
+                title="Analysis complete"
+                message="Your insights are ready."
+                actionLabel="View results"
+                onAction={handleViewResults}
+                onClose={() => setStatus('idle')}
+              />
+            )}
+            {status === 'error' && (
+              <StatusBanner
+                type="error"
+                title="Analysis failed"
+                message={errorMsg || 'Something went wrong. Please try again.'}
+                actionLabel="Retry"
+                onAction={() => setStatus('idle')}
+                onClose={() => setStatus('idle')}
+              />
+            )}
           </Box>
         </VStack>
       </Center>

@@ -1,7 +1,4 @@
-#root {
-  min-height: 100vh;
-}
-
+/* styles.css */
 .shimmer-text {
   background: linear-gradient(90deg, #999 0%, #fff 20%, #999 40%);
   background-size: 200% 100%;
