@@ -48,18 +48,6 @@ class ScraperRequest(BaseModel):
             }
         }
 
-
-class PostData(BaseModel):
-    """Individual post data."""
-    text: str
-    link: Optional[str] = None
-    likes: Optional[int] = None
-    comments: Optional[int] = None
-    reposts: Optional[int] = None
-    date_posted: Optional[str] = None
-    views: Optional[int] = None
-
-
 class ScraperResponse(BaseModel):
     """Response model for scraping endpoint."""
     scraped_at: str
@@ -114,67 +102,3 @@ class ScraperTaskResponse(BaseModel):
                 "source_link": "https://www.threads.com/@yannlecun"
             }
         }
-
-
-# ============================================================================
-# Raw Data Models
-# ============================================================================
-
-class RawDataCreate(BaseModel):
-    """
-    Request model for creating raw data entries.
-
-    Used when initializing a new scraping job in the database.
-    """
-    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the data was collected")
-    source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
-    status: str = Field(default="processing", description="Processing status of the data (processing, completed, failed)")
-    raw_data: str = Field(default="", description="JSON string of scraped posts (full ScraperResponse)")
-    error: Optional[str] = Field(None, description="Error message if scraping failed")
-
-
-class RawDataUpdate(BaseModel):
-    """
-    Request model for updating raw data entries.
-
-    All fields are optional to support partial updates. Used to update
-    scraping status and populate results after scraping completes.
-    """
-    timestamp: Optional[datetime] = None
-    source_link: Optional[str] = Field(None, min_length=1, max_length=2000)
-    status: Optional[str] = None
-    raw_data: Optional[str] = None
-    error: Optional[str] = None
-
-
-class RawDataResponse(BaseModel):
-    """
-    Response model for raw data queries.
-
-    Includes all fields from RawDataDocument plus MongoDB metadata.
-    The id field is the MongoDB ObjectId converted to string.
-    """
-    id: str = Field(..., description="MongoDB document ID (ObjectId as string)")
-    timestamp: datetime = Field(..., description="Timestamp when the data was collected")
-    source_link: str = Field(..., description="URL or link to the source data")
-    status: str = Field(..., description="Processing status of the data (processing, completed, failed)")
-    raw_data: str = Field(..., description="JSON string of scraped posts (full ScraperResponse)")
-    error: Optional[str] = Field(None, description="Error message if scraping failed")
-    created_at: datetime = Field(..., description="Timestamp when document was created in database")
-    updated_at: datetime = Field(..., description="Timestamp when document was last updated")
-
-    class Config:
-        populate_by_name = True
-        json_encoders = {ObjectId: str}
-
-
-class RawDataListResponse(BaseModel):
-    """
-    Response model for paginated raw data list queries.
-
-    Used by list endpoints to return multiple raw data entries with pagination metadata.
-    """
-    items: List[RawDataResponse]
-    total: int
-    skip: int
-    limit: int

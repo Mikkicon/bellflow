@@ -6,42 +6,7 @@ import ShimmerText from './components/ui/shimmerText/ShimmerText'
 import { RiExpandRightLine } from "react-icons/ri";
 import StatusBanner from './components/StatusBanner'
 import AnalysisTimeline from './components/AnalysisTimeline'
-
-const demoTimelineData = [
-  {
-    id: 'task-001',
-    request_id: '4489028f-ab79-4765-b256-ce7d343ba453',
-    name: 'Data Retriving',
-    message: 'Process customer data for analytics',
-    status: 'completed',
-    timestamp: '2024-01-15T10:45:00',
-    events: [],
-  },
-  {
-    id: 'task-002',
-    request_id: '4489028f-ab79-4765-b256-ce7d343ba453',
-    name: 'Data Analysis',
-    message: '',
-    status: 'pending',
-    timestamp: '2024-01-15T10:45:00',
-    events: [
-      {
-        id: 1,
-        name: 'reasoning 1',
-        status: 'info',
-        message: 'Task initialization completed',
-        timestamp: '2024-01-15T10:30:00',
-      },
-      {
-        id: 2,
-        name: 'reasoning 2',
-        status: 'success',
-        message: 'Task completed successfully',
-        timestamp: '2024-01-15T10:45:00',
-      },
-    ],
-  },
-]
+import submitScraperRequest from './services/analysisService'
 
 function App() {
   const [status, setStatus] = useState('idle') // 'idle' | 'processing' | 'success' | 'error'
@@ -50,29 +15,51 @@ function App() {
   const [timelineItems, setTimelineItems] = useState([])
 
   const handleAnalyze = async (link) => {
-    console.log('Analyzing link:', link)
+    const normalizedLink = typeof link === 'string' ? link.trim() : ''
+
+    if (!normalizedLink) {
+      setStatus('error')
+      setErrorMsg('Please paste a profile link before starting an analysis.')
+      return
+    }
+
+    console.log('Analyzing link:', normalizedLink)
     setStatus('processing')
     setErrorMsg('')
-    setTimelineItems([])
+    setResultId(null)
+    setTimelineItems([
+      {
+        id: 'submission',
+        request_id: 'submission',
+        name: 'Submitting request',
+        message: 'Contacting BellFlow scraper service...',
+        status: null,
+        timestamp: new Date().toISOString(),
+        events: [],
+      },
+    ])
 
     try {
-      // TODO: wire up the real analysis call here
-      // Example: const { id } = await analyzeLink(link)
-      // setResultId(id)
-      // setStatus('success')
-      setTimelineItems(demoTimelineData)
-      // Temporary demo success to show UI
-      // setTimeout(() => {
-      //   setTimelineItems(demoTimelineData)
-      //   setResultId('demo-id')
-      //   setStatus('success')
-      // }, 1000)
+      const response = await submitScraperRequest(normalizedLink)
+
+      setTimelineItems((previous) => ([
+        ...(previous || []),
+        {
+          id: 'task-created',
+          request_id: response?.task_id || 'task-created',
+          name: 'Analysis task created',
+          message: null,
+          status: null,
+          timestamp: new Date().toISOString(),
+          events: [],
+        },
+      ]))
+
+      setResultId(response?.task_id || null)
     } catch (e) {
       console.error(e)
       setErrorMsg(e?.message || 'Something went wrong. Please try again.')
       setStatus('error')
-    } finally {
-      // no-op; status managed above
     }
   }
 
