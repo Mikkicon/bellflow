@@ -13,6 +13,10 @@ class HealthResponse(BaseModel):
     message: str
     timestamp: datetime
 
+class DataResponse(BaseModel):
+    """Response model for data endpoint."""
+    id: str = Field(..., description="Document ID")
+    analysis: Dict[str, Any] = Field(..., description="Analysis results as JSON object")
 
 # ============================================================================
 # Scraper Models
