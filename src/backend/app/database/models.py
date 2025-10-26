@@ -104,29 +104,22 @@ class OrderDocument(BaseDocument):
 
 
 class RawDataDocument(BaseDocument):
-    """
-    Raw data document model for storing scraped or collected data.
+    """Raw data document model for storing scraped or collected data."""
 
-    Inherits from BaseDocument:
-    - id (PyObjectId, aliased to _id): MongoDB document ID
-    - created_at: Timestamp when document was created
-    - updated_at: Timestamp when document was last updated
-    """
-
+    id: str = Field(..., description="Unique identifier for the raw data entry")
     timestamp: datetime = Field(default_factory=datetime.utcnow, description="Timestamp when the data was collected")
     source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
-    status: str = Field(default="processing", description="Processing status of the data (processing, completed, failed)")
-    raw_data: str = Field(default="", description="JSON string of scraped posts (full ScraperResponse)")
-    error: Optional[str] = Field(None, description="Error message if scraping failed")
+    status: str = Field(default="processing", description="Processing status of the data")
+    raw_data: str = Field(default="", description="The actual raw data content as a string")
 
     class Config:
         json_schema_extra = {
             "example": {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
                 "timestamp": "2023-01-01T12:00:00Z",
                 "source_link": "https://example.com/data-source",
                 "status": "processing",
-                "raw_data": "{\"items\": [...]}",
-                "error": None
+                "raw_data": "This is the raw data content"
             }
         }
 
