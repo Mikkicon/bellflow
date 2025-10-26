@@ -59,6 +59,7 @@ function App() {
       ]))
 
       setResultId(response?.task_id || null)
+      setStatus('success');
     } catch (e) {
       console.error(e)
       setErrorMsg(e?.message || 'Something went wrong. Please try again.')
