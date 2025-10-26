@@ -110,6 +110,9 @@ class SessionManager:
             Tuple of (playwright instance, BrowserContext, session_id)
             Both playwright and context must be closed properly to ensure session persistence.
             Use unregister_session(session_id) after closing to clean up tracking.
+
+        Raises:
+            ValueError: If profile doesn't exist
         """
         profile_dir = self.get_profile_dir(user_id)
 

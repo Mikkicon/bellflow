@@ -163,7 +163,11 @@ async def run_scraping_task_wrapper(task_id: str, request: ScraperRequest):
     """
     try:
         await run_scraping_task(task_id, request)
+<<<<<<< HEAD
         logger.info(f"[Task {task_id}] Background task finished")
+=======
+        logger.info(f"[Task {task_id}] ✓ Completed successfully")
+>>>>>>> 8b23815 (Multiple scraper fixes)
     except Exception as e:
         logger.critical(f"[Task {task_id}] Unhandled exception in task wrapper: {e}", exc_info=True)
 
