@@ -56,8 +56,8 @@ class RawDataDocument(BaseDocument):
     source_link: str = Field(..., min_length=1, max_length=2000, description="URL or link to the source data")
     status: str = Field(default="retriver:processing", description="Processing status of the data")
     raw_data: str = Field(default="", description="The actual raw data content as a string")
-    analysis: str = Field(default="", description="Analysis results or task name")
-    events: str = Field(default="[]", description="JSON string containing events array")
+    analysis: str = Field(default="", description="Result of running analyzer on raw_data: suggested posts + metrics and suggestions")
+    events: str = Field(default="[]", description="Reasoning of analysis")
     error: Optional[str] = Field(None, description="Error message if scraping failed")
 
     class Config:
