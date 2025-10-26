@@ -97,7 +97,10 @@ class SessionManager:
         headless: bool = False
     ) -> tuple:
         """
-        Load an existing browser session.
+        Load or create a browser session.
+
+        If a profile exists for the user_id, it will be loaded (with saved cookies, login state, etc.).
+        If no profile exists, a new one will be created automatically.
 
         Args:
             user_id: User identifier
@@ -107,18 +110,13 @@ class SessionManager:
             Tuple of (playwright instance, BrowserContext, session_id)
             Both playwright and context must be closed properly to ensure session persistence.
             Use unregister_session(session_id) after closing to clean up tracking.
-
-        Raises:
-            ValueError: If profile doesn't exist
         """
-        if not self.profile_exists(user_id):
-            raise ValueError(
-                f"No browser profile found for user '{user_id}'. "
-                f"Please run create_session() first."
-            )
-
         profile_dir = self.get_profile_dir(user_id)
-        print(f"📁 Loading browser profile for user: {user_id}")
+
+        if self.profile_exists(user_id):
+            print(f"📁 Loading existing browser profile for user: {user_id}")
+        else:
+            print(f"📁 Creating new browser profile for user: {user_id}")
 
         playwright = sync_playwright().start()
         context = playwright.chromium.launch_persistent_context(
