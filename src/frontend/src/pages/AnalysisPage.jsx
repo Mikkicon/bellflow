@@ -235,7 +235,7 @@ const AnalysisPage = () => {
               <Flex
                 direction={{ base: 'column', lg: 'row' }}
                 gap={6}
-                align="stretch"
+                align="flex-start"
                 justify="space-between"
                 w="full"
                 overflowX={{ base: 'visible', lg: 'auto' }}
