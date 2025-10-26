@@ -45,7 +45,7 @@ def create_analyzer_task(doc: dict, status: str) -> Task:
         except (json.JSONDecodeError, ValueError) as e:
             logger.warning(f"Failed to parse events for document {doc.get('_id')}: {e}")
             events = []
-    
+
     return Task(
         id=f"analyzer-{doc.get('_id')}",
         request_id=str(doc.get('_id')),
@@ -62,7 +62,7 @@ def create_analyzer_task(doc: dict, status: str) -> Task:
 async def get_tasks_by_request_id(request_id: str):
     """
     Get tasks based on the raw_data document status.
-    
+
     Args:
         request_id: The MongoDB ObjectId of the raw_data document
         
@@ -77,21 +77,21 @@ async def get_tasks_by_request_id(request_id: str):
             object_id = ObjectId(request_id)
         except Exception:
             raise HTTPException(status_code=400, detail=f"Invalid ObjectId format: {request_id}")
-        
+
         # Get the raw_data collection
         collection = get_collection("raw_data")
         if collection is None:
             raise HTTPException(status_code=500, detail="Database not connected")
-        
+
         # Query for document by MongoDB _id
         doc = collection.find_one({"_id": object_id})
         if not doc:
             raise HTTPException(status_code=404, detail=f"No document found with ID: {request_id}")
-        
+
         # Get status and determine task generation logic
         status = doc.get("status", "")
         tasks = []
-        
+
         if status.startswith("analyzer:"):
             # Analyzer stage: return mocked retriever task + analyzer task
             analyzer_status = status.split(":")[1]
@@ -105,12 +105,11 @@ async def get_tasks_by_request_id(request_id: str):
             # Unknown status: default to retriever processing
             logger.warning(f"Unknown status '{status}' for document {request_id}, defaulting to retriever:processing")
             tasks.append(create_retriever_task(doc, "processing"))
-        
+
         return tasks
-        
+
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error retrieving tasks for ID {request_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
-
