@@ -132,10 +132,15 @@ const AnalysisPage = () => {
       {/* Header Section - Left Aligned, Compact */}
       <Box py={8} px={{ base: 6, md: 12 }}>
         <HStack justify="space-between" align="flex-start" w="full">
-          <VStack align="flex-start" gap={3}>
-            <Heading size="2xl" color="var(--brand-primary)">
-              Analysis summary
-            </Heading>
+           <VStack align="flex-start" gap={3}>
+             <HStack spacing={3} align="center">
+               <Heading size="2xl" color="var(--brand-primary)">
+                 Analysis summary
+               </Heading>
+               <Text fontSize="2xl" filter="drop-shadow(0 0 4px rgba(255, 193, 7, 0.5))">
+                 ✨
+               </Text>
+             </HStack>
             <Text color="gray.600" fontSize="md">
               Insights for request{' '}
               <Text as="span" fontWeight="semibold">{id}</Text>
