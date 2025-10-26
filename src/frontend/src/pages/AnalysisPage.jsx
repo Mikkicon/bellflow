@@ -1,10 +1,12 @@
 import {
+  Alert,
   Badge,
   Box,
   Button,
   Heading,
   HStack,
   Icon,
+  Spinner,
   Text,
   VStack,
   Wrap,
@@ -20,9 +22,9 @@ import {
   SimpleGrid,
 } from '@chakra-ui/react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FiFileText, FiFilm, FiImage, FiVideo, FiChevronDown, FiHeart, FiMessageCircle, FiRepeat } from 'react-icons/fi'
-import sampleAnalysisResponse from '../data/sampleAnalysisResponse.json'
+import { fetchAnalysisById } from '../services/analysisService'
 
 const mediaIconMap = {
   image: FiImage,
@@ -44,24 +46,88 @@ const capitalize = (value) => {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
+const getEngagementLevel = (post = {}) => {
+  if (!post || typeof post !== 'object') {
+    return null
+  }
+
+  if (post.predicted_engagement) {
+    return post.predicted_engagement
+  }
+
+  const likes = post.estimated_likes ?? post.predicted_likes
+  if (typeof likes !== 'number') {
+    return null
+  }
+
+  if (likes >= 250) {
+    return 'high'
+  }
+
+  if (likes >= 100) {
+    return 'medium'
+  }
+
+  return 'low'
+}
+
 const AnalysisPage = () => {
   const { id } = useParams()
-  const { suggested_posts: suggestedPosts = [] } = sampleAnalysisResponse
+  const [analysisData, setAnalysisData] = useState(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [expandedCards, setExpandedCards] = useState({})
+  const suggestedPosts = analysisData?.suggested_posts ?? []
+
+  useEffect(() => {
+    if (!id) {
+      setAnalysisData(null)
+      setIsLoading(false)
+      return
+    }
+
+    let isActive = true
+
+    const loadAnalysis = async () => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const response = await fetchAnalysisById(id)
+        if (!isActive) {
+          return
+        }
+
+        const analysis = response?.analysis ?? response ?? null
+        setAnalysisData(analysis)
+        setExpandedCards({})
+      } catch (err) {
+        if (!isActive) {
+          return
+        }
+
+        const message = err?.message || 'Failed to load the requested analysis.'
+        setError(message)
+        setAnalysisData(null)
+      } finally {
+        if (isActive) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadAnalysis()
+
+    return () => {
+      isActive = false
+    }
+  }, [id])
 
   const toggleCard = (index) => {
     setExpandedCards(prev => ({
       ...prev,
       [index]: !prev[index]
     }))
-  }
-
-  const generateEngagementMetrics = () => {
-    return {
-      likes: Math.floor(Math.random() * 5000) + 100,
-      comments: Math.floor(Math.random() * 500) + 10,
-      reposts: Math.floor(Math.random() * 200) + 5
-    }
   }
 
   const generateRecentNews = () => {
@@ -112,9 +178,15 @@ const AnalysisPage = () => {
   }
 
   const formatCount = (count) => {
-    if (count >= 1000) {
-      return (count / 1000).toFixed(1) + 'k'
+    if (count == null || Number.isNaN(count)) {
+      return '--'
     }
+
+    if (count >= 1000) {
+      const formatted = (count / 1000).toFixed(1).replace(/\.0$/, '')
+      return `${formatted}k`
+    }
+
     return count.toString()
   }
 
@@ -129,19 +201,30 @@ const AnalysisPage = () => {
     )
   }
 
-  const renderMediaSuggestion = (media) => {
-    const normalizedMedia = typeof media === 'string' ? media.toLowerCase() : ''
+  const renderMediaSuggestion = (post) => {
+    const mediaHint = post?.media_suggestion || post?.media_type || ''
+    const normalizedMedia = typeof mediaHint === 'string' ? mediaHint.toLowerCase() : ''
     const MediaIcon = mediaIconMap[normalizedMedia] || FiFileText
-    const metrics = generateEngagementMetrics()
+    const metrics = {
+      likes: post?.estimated_likes ?? post?.predicted_likes,
+      comments: post?.estimated_comments ?? post?.predicted_comments,
+      reposts: post?.estimated_reposts ?? post?.predicted_reposts,
+    }
 
     return (
       <VStack align="stretch" spacing={2}>
         <HStack spacing={1.5} color="gray.500">
           <Icon as={MediaIcon} boxSize={4} />
           <Text fontSize="xs" fontWeight="medium" textTransform="capitalize">
-            {normalizedMedia || 'Not specified'}
+            {capitalize(mediaHint) || 'Content'}
           </Text>
         </HStack>
+
+        {/* {post?.media_description && (
+          <Text fontSize="xs" color="gray.600">
+            {post.media_description}
+          </Text>
+        )} */}
 
         <HStack spacing={4} justify="space-between">
           <HStack spacing={1} color="gray.500">
@@ -230,7 +313,23 @@ const AnalysisPage = () => {
               supporting rationale before scheduling.
             </Text>
           </VStack>
-          {suggestedPosts.length > 0 ? (
+          {isLoading ? (
+            <HStack spacing={3} color="gray.600">
+              <Spinner size="sm" thickness="2px" speed="0.65s" />
+              <Text fontSize="sm" fontWeight="medium">
+                Loading analysis insights...
+              </Text>
+            </HStack>
+          ) : error ? (
+            <Alert.Root status="error" variant="subtle" borderRadius="md" alignItems="center">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description fontSize="sm">
+                  {error}
+                </Alert.Description>
+              </Alert.Content>
+            </Alert.Root>
+          ) : suggestedPosts.length > 0 ? (
             <Box w="full">
               <Flex
                 direction={{ base: 'column', lg: 'row' }}
@@ -242,25 +341,27 @@ const AnalysisPage = () => {
                 pb={2}
               >
                 {suggestedPosts.map((post, index) => {
-                  const mediaLabel = capitalize(post?.media_suggestion) || 'Content'
+                  const engagementLevel = getEngagementLevel(post)
+                  const postKey = post?.id || post?.media_suggestion || post?.media_type || post?.text || index
+                  const mediaLabel = capitalize(post?.media_suggestion || post?.media_type) || 'Content'
 
                   return (
-                     <Card.Root
-                       key={`${post.media_suggestion}-${index}`}
-                       size="sm"
-                       variant="outline"
-                       minW={{ base: '100%', lg: '300px' }}
-                       maxW={{ base: '100%', lg: '400px' }}
-                       flex="1"
-                       w="full"
-                       boxShadow="0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
-                       _hover={{
-                         borderColor: 'gray.300',
-                         boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 12px 20px -8px rgba(0, 0, 0, 0.1)',
-                         transform: 'translateY(-4px)'
-                       }}
-                       transition="all 0.3s ease"
-                     >
+                    <Card.Root
+                      key={postKey}
+                      size="sm"
+                      variant="outline"
+                      minW={{ base: '100%', lg: '300px' }}
+                      maxW={{ base: '100%', lg: '400px' }}
+                      flex="1"
+                      w="full"
+                      boxShadow="0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)"
+                      _hover={{
+                        borderColor: 'gray.300',
+                        boxShadow: '0 20px 40px -10px rgba(0, 0, 0, 0.15), 0 12px 20px -8px rgba(0, 0, 0, 0.1)',
+                        transform: 'translateY(-4px)'
+                      }}
+                      transition="all 0.3s ease"
+                    >
                       <CardHeader pb={3}>
                         <VStack align="stretch" gap={3}>
                           <HStack justify="space-between" align="flex-start">
@@ -272,7 +373,7 @@ const AnalysisPage = () => {
                                 {mediaLabel} Focus
                               </Text>
                             </VStack>
-                            {renderPredictedEngagementBadge(post.predicted_engagement)}
+                            {engagementLevel && renderPredictedEngagementBadge(engagementLevel)}
                           </HStack>
                         </VStack>
                       </CardHeader>
@@ -322,24 +423,24 @@ const AnalysisPage = () => {
                             </Wrap>
                           )}
 
-                            <Separator />
+                          <Separator />
 
-                            <VStack align="stretch" spacing={2}>
-                              {renderMediaSuggestion(post.media_suggestion)}
+                          <VStack align="stretch" spacing={2}>
+                            {renderMediaSuggestion(post)}
 
-                              <Button
-                                size="sm"
-                                bg="black"
-                                color="white"
-                                _hover={{ bg: "gray.800" }}
-                                _active={{ bg: "gray.900" }}
-                                fontWeight="semibold"
-                                mt={2}
-                              >
-                                Post
-                              </Button>
+                            <Button
+                              size="sm"
+                              bg="black"
+                              color="white"
+                              _hover={{ bg: "gray.800" }}
+                              _active={{ bg: "gray.900" }}
+                              fontWeight="semibold"
+                              mt={2}
+                            >
+                              Post
+                            </Button>
 
-                              {post.rationale && (
+                            {post.rationale && (
                               <Collapsible.Root
                                 open={expandedCards[index]}
                                 onOpenChange={() => toggleCard(index)}

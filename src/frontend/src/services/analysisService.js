@@ -73,4 +73,31 @@ export const fetchTaskStatus = async (taskId) => {
   }
 }
 
+export const fetchAnalysisById = async (analysisId) => {
+  if (!analysisId) {
+    throw new Error('An analysis ID is required before retrieving analysis data.')
+  }
+
+  try {
+    const { data } = await apiClient.get(`/v1/data/${analysisId}`)
+    return data
+  } catch (error) {
+    if (axios.isAxiosError(error)) {
+      const backendMessage = error.response?.data?.detail || error.response?.data?.message
+      const statusCode = error.response?.status
+      const errorMessage = backendMessage
+        || (statusCode ? `Request failed with status ${statusCode}` : 'Failed to reach BellFlow API.')
+
+      const requestError = new Error(errorMessage)
+      if (typeof statusCode === 'number') {
+        requestError.status = statusCode
+      }
+
+      throw requestError
+    }
+
+    throw error
+  }
+}
+
 export default submitScraperRequest
