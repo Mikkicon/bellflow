@@ -8,7 +8,7 @@ load_dotenv()
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
-from app.routers import tasks, scraper, raw_data
+from app.routers import tasks, scraper, data
 from app.models.schemas import HealthResponse
 from app.database import connect_database, disconnect_database
 
@@ -50,10 +50,9 @@ app.add_middleware(
 )
 
 # Include routers
-#app.include_router(posts_analyzer.router, prefix="/api", tags=["posts_analyzer"])
-app.include_router(tasks.router, prefix="/api", tags=["tasks"])
+app.include_router(tasks.router, prefix="/v1", tags=["tasks"])
 app.include_router(scraper.router, prefix="/v1", tags=["scraper"])
-app.include_router(raw_data.router, prefix="/api", tags=["raw-data"])
+app.include_router(data.router, prefix="/v1", tags=["data"])
 
 
 @app.get("/", response_model=HealthResponse)
