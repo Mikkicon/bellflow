@@ -78,6 +78,9 @@ const AnalysisPage = () => {
   const [error, setError] = useState(null)
   const [expandedCards, setExpandedCards] = useState({})
   const suggestedPosts = analysisData?.suggested_posts ?? []
+  const recentNewsItems = Array.isArray(analysisData?.news)
+    ? analysisData.news.filter((item) => typeof item === 'string' && item.trim().length > 0)
+    : []
 
   useEffect(() => {
     if (!id) {
@@ -98,8 +101,30 @@ const AnalysisPage = () => {
           return
         }
 
-        const analysis = response?.analysis ?? response ?? null
-        setAnalysisData(analysis)
+        const rawAnalysis = response?.analysis ?? response ?? null
+        const baseAnalysis = rawAnalysis && typeof rawAnalysis === 'object'
+          ? { ...rawAnalysis }
+          : rawAnalysis
+        const newsItems = Array.isArray(response?.news)
+          ? response.news
+          : Array.isArray(rawAnalysis?.news)
+            ? rawAnalysis.news
+            : []
+        const normalizedNews = newsItems.filter((item) => typeof item === 'string' && item.trim().length > 0)
+
+        let mergedAnalysis = baseAnalysis
+        if (normalizedNews.length > 0) {
+          if (mergedAnalysis && typeof mergedAnalysis === 'object') {
+            mergedAnalysis = {
+              ...mergedAnalysis,
+              news: normalizedNews,
+            }
+          } else {
+            mergedAnalysis = { news: normalizedNews }
+          }
+        }
+
+        setAnalysisData(mergedAnalysis)
         setExpandedCards({})
       } catch (err) {
         if (!isActive) {
@@ -128,53 +153,6 @@ const AnalysisPage = () => {
       ...prev,
       [index]: !prev[index]
     }))
-  }
-
-  const generateRecentNews = () => {
-    return [
-      {
-        id: 1,
-        title: "AI Breakthrough in Natural Language Processing",
-        source: "TechCrunch",
-        timeAgo: "2h",
-        category: "Technology"
-      },
-      {
-        id: 2,
-        title: "New Social Media Trends Emerging in 2024",
-        source: "Social Media Today",
-        timeAgo: "4h",
-        category: "Social Media"
-      },
-      {
-        id: 3,
-        title: "Digital Marketing Strategies That Actually Work",
-        source: "Marketing Land",
-        timeAgo: "6h",
-        category: "Marketing"
-      },
-      {
-        id: 4,
-        title: "Content Creation Tips for Higher Engagement",
-        source: "Content Marketing Institute",
-        timeAgo: "8h",
-        category: "Content"
-      },
-      {
-        id: 5,
-        title: "The Future of Influencer Marketing",
-        source: "Influencer Marketing Hub",
-        timeAgo: "12h",
-        category: "Influencer"
-      },
-      {
-        id: 6,
-        title: "Brand Storytelling in the Digital Age",
-        source: "Brand Storytelling",
-        timeAgo: "1d",
-        category: "Branding"
-      }
-    ]
   }
 
   const formatCount = (count) => {
@@ -537,56 +515,52 @@ const AnalysisPage = () => {
             </Text>
           </VStack>
 
-          <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
-            {generateRecentNews().map((news) => (
-              <Box
-                key={news.id}
-                bg="white"
-                borderRadius="xl"
-                border="1px solid"
-                borderColor="gray.200"
-                p={4}
-                _hover={{
-                  borderColor: 'gray.300',
-                  boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.1)',
-                  transform: 'translateY(-2px)'
-                }}
-                transition="all 0.2s ease"
-                cursor="pointer"
-              >
-                <VStack align="stretch" gap={3}>
-                  <HStack justify="space-between" align="flex-start">
-                    <Badge
-                      colorScheme="blue"
-                      variant="subtle"
-                      fontSize="xs"
-                      px={2}
-                      py={1}
-                    >
-                      {news.category}
-                    </Badge>
-                    <Text fontSize="xs" color="gray.500">
-                      {news.timeAgo}
-                    </Text>
-                  </HStack>
-
+          {recentNewsItems.length > 0 ? (
+            <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} gap={4}>
+              {recentNewsItems.map((newsItem, index) => (
+                <Box
+                  key={`news-${index}`}
+                  bg="white"
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="gray.200"
+                  p={4}
+                  _hover={{
+                    borderColor: 'gray.300',
+                    boxShadow: '0 4px 12px -2px rgba(0, 0, 0, 0.1)',
+                    transform: 'translateY(-2px)'
+                  }}
+                  transition="all 0.2s ease"
+                >
                   <Text
                     fontSize="sm"
                     fontWeight="semibold"
                     color="gray.800"
-                    lineHeight="1.4"
-                    noOfLines={2}
+                    lineHeight="1.5"
                   >
-                    {news.title}
+                    {newsItem}
                   </Text>
-
-                  <Text fontSize="xs" color="gray.600">
-                    {news.source}
-                  </Text>
-                </VStack>
-              </Box>
-            ))}
-          </SimpleGrid>
+                </Box>
+              ))}
+            </SimpleGrid>
+          ) : (
+            <Box
+              borderRadius="xl"
+              border="1px dashed"
+              borderColor="gray.200"
+              py={8}
+              px={6}
+              textAlign="center"
+              bg="whiteAlpha.700"
+            >
+              <Text fontWeight="medium" color="gray.700">
+                No recent news was included with this analysis.
+              </Text>
+              <Text fontSize="sm" color="gray.500" mt={2}>
+                Add relevant headlines manually to keep the briefing current.
+              </Text>
+            </Box>
+          )}
         </VStack>
       </Box>
     </Box>
