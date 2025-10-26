@@ -10,8 +10,8 @@ from bson import ObjectId
 from datetime import datetime
 from openai.types.responses import ParsedResponse
 
-from backend.app.analyzer.utils import LLMClient, filter_posts
-from backend.app.database.connector import connect_database, get_collection
+from app.analyzer.utils import LLMClient, filter_posts
+from app.database.connector import connect_database, get_collection
 import asyncio
 
 
@@ -140,7 +140,11 @@ class AnalysisPoller:
             if collection is None:
                 self.logger.error("Failed to connect to database")
                 return
-            entries = collection.find({"status": "retriever:completed"},limit=1)
+            # Count entries first (modern pymongo doesn't support cursor.count())
+            query = {"status": "retriever:completed"}
+            entry_count = collection.count_documents(query)
+            self.logger.info(f"Found {entry_count} entries to analyze")
+            entries = collection.find(query, limit=1)
             for entry in entries:
                 try:
                     self._process_entry(entry, collection)
@@ -301,8 +305,8 @@ async def main():
     await startup_event()
     # To run the poller:
     poller = AnalysisPoller()
-    poller.run_once()  # Run once for testing
-    # poller.start_polling()  # Or start continuous polling
+    # poller.run_once()  # Run once for testing
+    poller.start_polling()  # Or start continuous polling
 
 
 if __name__ == "__main__":
