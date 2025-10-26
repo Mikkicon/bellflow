@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Center, Heading, Text, VStack, Drawer, Portal, CloseButton } from '@chakra-ui/react'
 import './App.css'
 import LinkInput from './components/LinkInput'
@@ -6,15 +6,90 @@ import ShimmerText from './components/ui/shimmerText/ShimmerText'
 import { RiExpandRightLine } from "react-icons/ri";
 import StatusBanner from './components/StatusBanner'
 import AnalysisTimeline from './components/AnalysisTimeline'
-import submitScraperRequest from './services/analysisService'
+import submitScraperRequest, { fetchTaskStatus } from './services/analysisService'
 
 function App() {
   const [status, setStatus] = useState('idle') // 'idle' | 'processing' | 'success' | 'error'
   const [errorMsg, setErrorMsg] = useState('')
   const [resultId, setResultId] = useState(null)
   const [timelineItems, setTimelineItems] = useState([])
+  const pollingRef = useRef(null)
+
+  const stopTaskPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+  }
+
+  // clear polling on unmount
+  useEffect(() => {
+    return () => {
+      stopTaskPolling()
+    }
+  }, [])
+
+  const startTaskPolling = (taskId) => {
+    if (!taskId) {
+      return
+    }
+
+    stopTaskPolling()
+    let isPolling = false
+
+    const poll = async () => {
+      if (isPolling) {
+        return
+      }
+
+      isPolling = true
+
+      try {
+        const tasks = await fetchTaskStatus(taskId)
+
+        if (Array.isArray(tasks)) {
+          setTimelineItems((previous) => {
+            const baseItems = previous.filter((item) => item.id === 'submission' || item.id === 'task-created')
+            return baseItems.concat(tasks)
+          })
+
+          const hasFailure = tasks.some((task) => (task.status || '').toLowerCase() === 'failed' || (task.status || '').toLowerCase() === 'error')
+          if (hasFailure) {
+            setErrorMsg('Analysis task failed. Please try again.')
+            setStatus('error')
+            stopTaskPolling()
+            return
+          }
+
+          const analyzerTask = tasks.find((task) => task.id?.startsWith('analyzer') || task.name === 'Data Analysis')
+          if (analyzerTask?.status?.toLowerCase() === 'completed') {
+            setStatus('success')
+            stopTaskPolling()
+          }
+        }
+      } catch (error) {
+        if (error?.status === 404) {
+          // Task not yet available; keep polling silently
+          return
+        }
+
+        console.error('Failed to fetch task status', error)
+        setErrorMsg(error?.message || 'Failed to fetch task status.')
+        setStatus('error')
+        stopTaskPolling()
+      } finally {
+        isPolling = false
+      }
+    }
+
+    poll()
+    pollingRef.current = setInterval(() => {
+      poll()
+    }, 5000)
+  }
 
   const handleAnalyze = async (link) => {
+    stopTaskPolling()
     const normalizedLink = typeof link === 'string' ? link.trim() : ''
 
     if (!normalizedLink) {
@@ -55,11 +130,17 @@ function App() {
         },
       ]))
 
-      setResultId(response?.task_id || null)
+      const taskId = response?.task_id || null
+      setResultId(taskId)
+      
+      if (taskId) {
+        startTaskPolling(taskId)
+      }
     } catch (e) {
       console.error(e)
       setErrorMsg(e?.message || 'Something went wrong. Please try again.')
       setStatus('error')
+      stopTaskPolling()
     }
   }
 

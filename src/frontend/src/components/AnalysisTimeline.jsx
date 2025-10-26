@@ -53,7 +53,7 @@ const AnalysisTimeline = ({ items = [], ...props }) => {
           kind: 'event',
           title: event.name,
           description: formatTimestamp(event.timestamp),
-          message: event.message,
+          message: event.message ? event.message : "No message provided.",
           status: event.status,
         })
       })
