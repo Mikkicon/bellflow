@@ -40,7 +40,7 @@ class LLMClient:
             vertexai.init(project="bellflow", location="us-central1")
             self.model = GenerativeModel(self.model_name)
         elif provider == "openai":
-            pass
+            self.model = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
@@ -71,7 +71,7 @@ class LLMClient:
             )
             return response.text
         elif self.provider == "openai":
-            response: ParsedResponse = client.responses.parse(
+            response: ParsedResponse = self.model.responses.parse(
                 model=self.model_name,
                 input=messages,
                 reasoning=Reasoning(effort="medium", summary="concise") if (MODEL in REASONING) else None,
@@ -102,3 +102,64 @@ def filter_posts(db_posts, limit=30):
         )
 
     return processed_posts
+
+# newsapi_tool_simple.py
+# <100 lines. Minimal tool function you can register with your agent/LLM tool registry.
+# Usage: register `newsapi_tool` as a callable tool. It accepts a dict-like payload and returns a dict.
+
+import os, time, requests
+from typing import List, Dict, Any
+from datetime import datetime, timedelta
+
+BASE = "https://newsapi.org/v2/everything"
+DEFAULT_PAGE_SIZE = 20
+MAX_RETRIES = 3
+BACKOFF = 1.0
+
+def _normalize_article(a: Dict[str, Any]) -> Dict[str, Any]:
+    src = a.get("source") or {}
+    return {
+        "source_id": src.get("id"),
+        "source_name": src.get("name"),
+        "author": a.get("author"),
+        "title": a.get("title") or "",
+        "description": a.get("description"),
+        "url": a.get("url"),
+        "urlToImage": a.get("urlToImage"),
+        "publishedAt": a.get("publishedAt"),
+        "content": a.get("content"),
+    }
+
+# @tool
+def fetch_and_prepare_news(query: str, n: int = 5, lang: str = "en") -> Dict[str, Any]:
+    """ Fetch top new articles for `query` """
+    api_key = os.getenv("NEWS_API_ORG_KEY")
+    if not api_key:
+        return {"status": "error", "message": "NEWSAPI_KEY required"}
+    # Set default date range: 7 days ago to today
+    from_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+    to_date = datetime.now().strftime("%Y-%m-%d")
+    params = {
+        "q": query, 
+        "pageSize": max(DEFAULT_PAGE_SIZE, n), 
+        "sortBy": "popularity", 
+        "language": lang,
+        "from": from_date,
+        "to": to_date
+    }
+    resp = requests.get(BASE, params={**params, "apiKey": api_key}, headers={"Accept": "application/json"}, timeout=8)
+    data = resp.json()
+    raw = data.get("articles", [])[:n]
+    articles = [_normalize_article(a) for a in raw]
+    bullets: List[str] = []
+    for a in articles:
+        one_line = (a.get("description") or a.get("content") or "").split("\n")[0].strip()
+        if not one_line:
+            one_line = a["title"]
+        date = a.get("publishedAt", "").split("T")[0]
+        bullets.append(f"{a['title']} — {one_line} ({a.get('source_name')},{date}) — {a.get('url')}")
+    combined = "\n".join(bullets)
+    print(articles)
+    return {"status": "ok", "totalResults": data.get("totalResults", 0), "articles": articles, "combined_summary": combined}
+
+

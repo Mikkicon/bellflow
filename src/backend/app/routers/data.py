@@ -52,10 +52,15 @@ async def get_data_by_id(id: str):
         except json.JSONDecodeError as e:
             raise HTTPException(status_code=400, detail=f"Analysis field contains invalid JSON: {str(e)}")
 
+        news = document.get("news")
+        if news is None:
+            raise HTTPException(status_code=400, detail="news field is null or empty")
+
         # Return only id and analysis fields
         return DataResponse(
             id=str(document["_id"]),
-            analysis=analysis_obj
+            analysis=analysis_obj,
+            news=news
         )
 
     except HTTPException:
