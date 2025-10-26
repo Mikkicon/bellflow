@@ -7,6 +7,7 @@ import ShimmerText from './components/ui/shimmerText/ShimmerText'
 import { RiExpandRightLine } from "react-icons/ri";
 import StatusBanner from './components/StatusBanner'
 import AnalysisTimeline from './components/AnalysisTimeline'
+import submitScraperRequest from './services/analysisService'
 import { demoTimelineData } from './data/demoTimelineData'
 
 function App() {
@@ -17,33 +18,51 @@ function App() {
   const navigate = useNavigate()
 
   const handleAnalyze = async (link) => {
-    console.log('Analyzing link:', link)
+    const normalizedLink = typeof link === 'string' ? link.trim() : ''
+
+    if (!normalizedLink) {
+      setStatus('error')
+      setErrorMsg('Please paste a profile link before starting an analysis.')
+      return
+    }
+
+    console.log('Analyzing link:', normalizedLink)
     setStatus('processing')
     setErrorMsg('')
-    setTimelineItems([])
     setResultId(null)
+    setTimelineItems([
+      {
+        id: 'submission',
+        request_id: 'submission',
+        name: 'Submitting request',
+        message: 'Contacting BellFlow scraper service...',
+        status: null,
+        timestamp: new Date().toISOString(),
+        events: [],
+      },
+    ])
 
     try {
-      // TODO: wire up the real analysis call here
-      // Example: const { id } = await analyzeLink(link)
-      // setResultId(id)
-      // setStatus('success')
-      const dummyResultId = 'analysis-123456'
-      setTimelineItems(demoTimelineData)
-      setResultId(dummyResultId)
-      setStatus('success')
-      // Temporary demo success to show UI
-      // setTimeout(() => {
-      //   setTimelineItems(demoTimelineData)
-      //   setResultId('demo-id')
-      //   setStatus('success')
-      // }, 1000)
+      const response = await submitScraperRequest(normalizedLink)
+
+      setTimelineItems((previous) => ([
+        ...(previous || []),
+        {
+          id: 'task-created',
+          request_id: response?.task_id || 'task-created',
+          name: 'Analysis task created',
+          message: null,
+          status: null,
+          timestamp: new Date().toISOString(),
+          events: [],
+        },
+      ]))
+
+      setResultId(response?.task_id || null)
     } catch (e) {
       console.error(e)
       setErrorMsg(e?.message || 'Something went wrong. Please try again.')
       setStatus('error')
-    } finally {
-      // no-op; status managed above
     }
   }
 
