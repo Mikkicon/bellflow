@@ -1,4 +1,6 @@
 from __future__ import annotations
+import os, json
+from datetime import datetime, timedelta
 import json
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
@@ -9,11 +11,19 @@ import logging
 from bson import ObjectId
 from datetime import datetime
 from openai.types.responses import ParsedResponse
+from langchain.agents import AgentExecutor, create_tool_calling_agent, tool
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import AIMessage, HumanMessage
+from langchain import hub
+from langchain_community.llms import _import_openai
+from langchain.agents import AgentExecutor, create_react_agent
 
-from app.analyzer.utils import LLMClient, filter_posts
+from app.analyzer.utils import LLMClient, fetch_and_prepare_news
 from app.database.connector import connect_database, get_collection
 import asyncio
 
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 
 @dataclass
@@ -21,6 +31,10 @@ class AgentContext:
     posts: List[Dict[str, Any]]
     top_hashtags: Optional[List[str]] = None
     author_stats: Optional[Dict[str, Any]] = None
+
+
+class Topic(BaseModel):
+    topics: List[str]
 
 
 class SuggestedPost(BaseModel):
@@ -36,6 +50,7 @@ class SuggestedPost(BaseModel):
 class ReasoningStep(BaseModel):
     text: str = Field(..., min_length=5, max_length=100)
 
+
 class ResponseSchema(BaseModel):
     suggested_posts: List[SuggestedPost] = Field(..., min_length=3, max_length=3)
     reasoning_steps: List[ReasoningStep] = Field(..., min_length=5)
@@ -45,30 +60,26 @@ class AnalysisResult(BaseModel):
     raw: str = Field(...)
     final: str = Field(...)
     events: Any = Field(...)
+    news: List[str] = Field(...)
 
 
-def build_prompt(
-    context: AgentContext, chat_history: List[Dict[str, str]]
-) -> List[Dict[str, str]]:
+def build_prompt() -> List[Dict[str, str]]:
     """
     Build the messages list for OpenAI ChatCompletion.
     Provide tools list and strict instructions for output format (CALL/FINAL_JSON).
     """
-    system = (
-        "You are a final-stage social media strategist agent. You MUST produce exactly one FINAL_JSON block "
-        "containing three candidate posts in JSON conforming to the schema. "
-        "Return a line starting with FINAL_JSON: followed by valid JSON.\n"
-        "Do NOT output chain-of-thought. Output only the FINAL_JSON block (and short clarifying one-line comments are allowed)."
-    )
 
     context_text = {
         "role": "system",
-        "content": system
-        + f"\n\nContext summary:\n- top_hashtags: {context.top_hashtags}\n- author_stats: {json.dumps(context.author_stats)}\n- posts_count: {len(context.posts)}\n",
+        "content": (
+            "You are a final-stage social media strategist agent. You MUST produce exactly one FINAL_JSON block "
+            "containing three candidate posts in JSON conforming to the schema. "
+            "Return a line starting with FINAL_JSON: followed by valid JSON.\n"
+            "Do NOT output chain-of-thought. Output only the FINAL_JSON block (and short clarifying one-line comments are allowed)."
+        ),
     }
     messages = [context_text]
     # append conversation history (assistant/tool results and user)
-    messages.extend(chat_history)
     # assistant kickoff: give the model an initial instruction to propose next actions
     kickoff = {
         "role": "user",
@@ -81,28 +92,71 @@ def build_prompt(
     return messages
 
 
-def run_agent(
-    context: AgentContext, max_steps: int = 1, provider: str = "openai"
-) -> AnalysisResult:
-    # return {"final": '{"suggested_posts":[{"text":"🌟 Just dropped a new adventure vlog! Join me as I explore hidden gems in the city. You won’t want to miss this! 🚀✨ #AdventureAwaits #VlogLife","hashtags":["AdventureAwaits","VlogLife"],"media_suggestion":"video","predicted_engagement":"high","rationale":"Adventure content tends to resonate well with audiences, especially when it includes exciting visuals."},{"text":"💡 Did you know? The average person spends 6 years of their life dreaming! What\'s the wildest dream you\'ve ever had? Share below! 😴✨ #DreamBig #Inspiration","hashtags":["DreamBig","Inspiration"],"media_suggestion":"none","predicted_engagement":"medium","rationale":"Engaging followers through a thought-provoking question encourages interaction while tapping into universal experiences."},{"text":"🎉 GIVEAWAY ALERT! 🎉 I’m giving away some of my favorite gear to one lucky follower! To enter: 1️⃣ Follow me 2️⃣ Like this post 3️⃣ Tag a friend! Good luck! 🍀 #Giveaway #GoodLuck","hashtags":["Giveaway","GoodLuck"],"media_suggestion":"image","predicted_engagement":"high","rationale":"Giveaways are a proven method to boost engagement and increase follower count rapidly."}]}'}
+def run_agent(context: AgentContext, provider: str = "openai") -> AnalysisResult:
+    # Simple 3-step pipeline:
+    # 1) ask LLM for 3 topics based on recent posts
+    # 2) fetch news for those topics
+    # 3) ask LLM to generate 3 suggested posts using posts + news summary
     llm_client = LLMClient(provider=provider)
-    chat_history: List[Dict[str, str]] = []
-    steps = 0
-    while steps < max_steps:
-        messages = build_prompt(context, chat_history)
-        # GENERATE
-        response = llm_client.generate(
-            messages,
-            temperature=0.7,
-            max_tokens=800,
-            response_format=ResponseSchema,
-            # TODO news - tools=[]
-        )
-        
-        # chat_history.append({"role": "assistant", "content": response})
-        steps += 1
-        # {"final": response.output[0].content[0].text, "events": response.output[0].content[0].parsed.model_dump_json(), "chat_history": chat_history}
-        return AnalysisResult(raw=response.model_dump_json(), final=response.output[0].content[0].text, events=[s.model_dump() for s in response.output[0].content[0].parsed.reasoning_steps])
+
+    # prepare a short text summary of recent posts
+    posts_texts = [p.get("text", "") for p in (context.posts or [])][:10]
+    posts_text = "\n".join([f"- {t}" for t in posts_texts if t])
+
+    # Step 1: ask for 3 topics
+    topic_prompt = [
+        {
+            "role": "system",
+            "content": 'You are a concise assistant. Return a JSON array of three short topic phrases (e.g. ["topic1", "topic2", "topic3"]). No extra text.',
+        },
+        {
+            "role": "user",
+            "content": f"Given these recent posts:\n{posts_text}\nProvide exactly 3 concise topics (short phrases).",
+        },
+    ]
+    resp_topics = llm_client.generate(
+        topic_prompt, temperature=0.2, max_tokens=200, response_format=Topic
+    )
+    topics = resp_topics.output[0].content[0].parsed.topics
+    print("\n\ntopics")
+    print(topics)
+
+    # Step 2: fetch news for topics (use helper)
+    news_result = fetch_and_prepare_news(query=" OR ".join(topics), n=5)
+    news_summary = (
+        news_result.get("combined_summary") if isinstance(news_result, dict) else ""
+    )
+    print("\n\nnews_result")
+    print(news_result)
+    # Step 3: ask LLM to produce 3 suggested posts using posts + short news summary
+    final_prompt = [
+        {
+            "role": "system",
+            "content": "You are a social media strategist. Return exactly one FINAL_JSON block containing three candidate posts in JSON.",
+        },
+        {
+            "role": "user",
+            "content": f"Recent posts:\n{posts_text}\n\nLatest news summary:\n{news_summary}\n\nCreate 3 candidate posts optimized for virality, return JSON only.",
+        },
+    ]
+
+    response = llm_client.generate(
+        final_prompt,
+        temperature=0.7,
+        max_tokens=800,
+        response_format=ResponseSchema,
+    )
+    print("\n\nfinal")
+    print(response)
+
+    raw = response.model_dump_json()
+    final_text = response.output[0].content[0].text
+    events = [
+        s.model_dump() for s in response.output[0].content[0].parsed.reasoning_steps
+    ]
+    return AnalysisResult(
+        raw=raw, final=final_text, events=events, news=[ar["title"] for ar in news_result["articles"]]
+    )
 
 
 def main():
@@ -133,26 +187,22 @@ class AnalysisPoller:
         self.poll_interval = poll_interval
         self.logger = logging.getLogger(__name__)
 
-
     def poll_and_analyze(self):
         try:
             collection = get_collection("raw_data")
             if collection is None:
                 self.logger.error("Failed to connect to database")
                 return
-            # Count entries first (modern pymongo doesn't support cursor.count())
-            query = {"status": "retriever:completed"}
-            entry_count = collection.count_documents(query)
-            self.logger.info(f"Found {entry_count} entries to analyze")
-            entries = collection.find(query, limit=1)
+            entries = collection.find({"status": "retriever:completed"}, limit=10)
             for entry in entries:
                 try:
                     self._process_entry(entry, collection)
                 except Exception as e:
-                    self.logger.error(f"Failed to process entry {entry.get('id', 'unknown')}: {e}")
+                    self.logger.error(
+                        f"Failed to process entry {entry.get('id', 'unknown')}: {e}"
+                    )
         except Exception as e:
             self.logger.error(f"Error during polling: {e}")
-
 
     def _process_entry(self, entry: Dict[str, Any], collection):
         try:
@@ -166,14 +216,20 @@ class AnalysisPoller:
             posts_data = raw_data.get("items", [])
             if not posts_data:
                 self.logger.warning(f"No posts found in entry {entry.get('id')}")
-                self._update_entry_with_error(entry, "No posts found in raw_data", collection)
+                self._update_entry_with_error(
+                    entry, "No posts found in raw_data", collection
+                )
                 return
 
             # Filter and sort posts
             filtered_posts = self._filter_and_sort_posts(posts_data)
             if not filtered_posts:
-                self.logger.warning(f"No valid posts after filtering for entry {entry.get('id')}")
-                self._update_entry_with_error(entry, "No valid posts after filtering", collection)
+                self.logger.warning(
+                    f"No valid posts after filtering for entry {entry.get('id')}"
+                )
+                self._update_entry_with_error(
+                    entry, "No valid posts after filtering", collection
+                )
                 return
 
             # Run agent analysis
@@ -181,15 +237,18 @@ class AnalysisPoller:
             self._update_entry_with_analysis(entry, result, collection)
         except json.JSONDecodeError as e:
             error_msg = f"Failed to parse raw_data JSON: {str(e)}"
-            self.logger.error(f"Failed to parse raw_data JSON for entry {entry.get('id')}: {e}")
+            self.logger.error(
+                f"Failed to parse raw_data JSON for entry {entry.get('id')}: {e}"
+            )
             self._update_entry_with_error(entry, error_msg, collection)
         except Exception as e:
             error_msg = f"Error processing entry: {str(e)}"
             self.logger.error(f"Error processing entry {entry.get('id')}: {e}")
             self._update_entry_with_error(entry, error_msg, collection)
 
-
-    def _filter_and_sort_posts(self, posts_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _filter_and_sort_posts(
+        self, posts_data: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         filtered_posts = []
         for post in posts_data:
             filtered_post = {
@@ -198,7 +257,7 @@ class AnalysisPoller:
                 "retweets": post.get("reposts", 0) or 0,
                 "replies": post.get("comments", 0) or 0,
                 "impressions": post.get("views", 0) or 0,
-                "timestamp": post.get("date_posted", "")
+                "timestamp": post.get("date_posted", ""),
             }
             if filtered_post["text"]:
                 filtered_posts.append(filtered_post)
@@ -206,20 +265,18 @@ class AnalysisPoller:
         filtered_posts.sort(key=lambda x: x["likes"], reverse=True)
         return filtered_posts
 
-
     def _run_analysis(self, posts: List[Dict[str, Any]]):
         try:
             # Create agent context
             context = AgentContext(posts=posts)
             # Run agent
-            result = run_agent(context, max_steps=1)
+            result = run_agent(context)
             # Return the final analysis as JSON string
             return result
         except Exception as e:
             self.logger.error(f"Error running agent analysis: {e}")
             # Re-raise the exception so it can be handled by _process_entry
             raise Exception(f"Analysis failed: {str(e)}")
-
 
     def _update_entry_with_analysis(self, entry: Dict[str, Any], analysis: AnalysisResult, collection):
         try:
@@ -230,6 +287,7 @@ class AnalysisPoller:
                     "$set": {
                         "raw_analysis": analysis.raw,
                         "analysis": analysis.final,
+                        "news": analysis.news,
                         "events": analysis.events,
                         "status": "analyzer:completed",
                         "updated_at": datetime.utcnow()
@@ -243,8 +301,9 @@ class AnalysisPoller:
         except Exception as e:
             self.logger.error(f"Failed to update entry {entry.get('id')} with analysis: {e}")
 
-
-    def _update_entry_with_error(self, entry: Dict[str, Any], error_message: str, collection):
+    def _update_entry_with_error(
+        self, entry: Dict[str, Any], error_message: str, collection
+    ):
         """
         Update the entry with error information and set status to analyzer:failed.
         """
@@ -255,24 +314,31 @@ class AnalysisPoller:
                     "$set": {
                         "error": error_message,
                         "status": "analyzer:failed",
-                        "updated_at": datetime.utcnow()
+                        "updated_at": datetime.utcnow(),
                     }
-                }
+                },
             )
             if result.modified_count > 0:
-                self.logger.info(f"Successfully updated entry {entry.get('id')} with error status")
+                self.logger.info(
+                    f"Successfully updated entry {entry.get('id')} with error status"
+                )
             else:
-                self.logger.warning(f"No document updated for entry {entry.get('id')} with error")
+                self.logger.warning(
+                    f"No document updated for entry {entry.get('id')} with error"
+                )
         except Exception as e:
-            self.logger.error(f"Failed to update entry {entry.get('id')} with error: {e}")
-
+            self.logger.error(
+                f"Failed to update entry {entry.get('id')} with error: {e}"
+            )
 
     def start_polling(self):
         """
         Start continuous polling loop.
         """
-        self.logger.info(f"Starting analysis poller with {self.poll_interval}s interval")
-        
+        self.logger.info(
+            f"Starting analysis poller with {self.poll_interval}s interval"
+        )
+
         while True:
             try:
                 self.poll_and_analyze()
@@ -287,6 +353,7 @@ class AnalysisPoller:
     def run_once(self):
         self.logger.info("Running analysis polling once")
         self.poll_and_analyze()
+
 
 async def startup_event():
     """Initialize database connection on startup."""
