@@ -17,6 +17,7 @@ class DataResponse(BaseModel):
     """Response model for data endpoint."""
     id: str = Field(..., description="Document ID")
     analysis: Dict[str, Any] = Field(..., description="Analysis results as JSON object")
+    news: List[str] = Field(..., description="News list")
 
 # ============================================================================
 # Scraper Models
