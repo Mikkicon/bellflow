@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import json
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
+from openai import OpenAI
 from pydantic import BaseModel, Field
 from typing import Literal
 import time
@@ -107,16 +108,26 @@ def run_agent(context: AgentContext, provider: str = "openai") -> AnalysisResult
     topic_prompt = [
         {
             "role": "system",
-            "content": 'You are a concise assistant. Return a JSON array of three short topic phrases (e.g. ["topic1", "topic2", "topic3"]). No extra text.',
+            "content": 'You are a concise assistant. Return a JSON array of three short topic phrases (e.g. {"topics": ["topic1", "topic2", "topic3"]}). No extra text.',
         },
         {
             "role": "user",
             "content": f"Given these recent posts:\n{posts_text}\nProvide exactly 3 concise topics (short phrases).",
         },
     ]
-    resp_topics = llm_client.generate(
-        topic_prompt, temperature=0.2, max_tokens=200, response_format=Topic
-    )
+    try:
+        nemotron_model = "nvidia/llama-3.1-nemotron-70b-instruct"
+        openrouter_client = OpenAI(base_url="https://openrouter.ai/api/v1",api_key=os.environ.get("OPENROUTER_API_KEY"))
+        resp_topics = openrouter_client.responses.parse(
+            input=topic_prompt, 
+            temperature=0.2, 
+            text_format=Topic,
+            model=nemotron_model,
+        )
+    except Exception as e:
+        resp_topics = llm_client.generate(
+            topic_prompt, temperature=0.2, max_tokens=200, response_format=Topic
+        )
     topics = resp_topics.output[0].content[0].parsed.topics
     print("\n\ntopics")
     print(topics)
