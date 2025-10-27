@@ -10,7 +10,7 @@ from app.models.schemas import (
     ScraperTaskResponse
 )
 from app.database.models import RawDataDocument
-from app.scraper import ThreadsScraper, XScraper
+from app.scraper import ThreadsScraper, XScraper, LinkedInScraper, LinkedInTxtScraper
 from app.database.connector import get_collection
 import logging
 
@@ -191,6 +191,9 @@ async def run_scraping_task(task_id: str, request: ScraperRequest):
         elif "x.com" in url_lower or "twitter.com" in url_lower:
             scraper_class = XScraper
             platform_name = "XScraper"
+        elif "linkedin.com" in url_lower:
+            scraper_class = LinkedInTxtScraper
+            platform_name = "LinkedInTxtScraper"
         else:
             error_msg = f"Unsupported platform. Currently supports Threads.com and X.com (Twitter). URL: {request.url}"
             logger.error(f"[Task {task_id}] {error_msg}")

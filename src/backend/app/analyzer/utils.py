@@ -14,11 +14,12 @@ from pathlib import Path
 
 # Load .env from the backend directory (2 levels up from this file)
 env_path = Path(__file__).parent.parent.parent / ".env"
+# env_path = "/Users/mp/projects/bellflow/.env"
+# print("env_path", env_path)
 load_dotenv(dotenv_path=env_path)
 vertexai.init(project="bellflow", location="us-central1")
 
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 MODEL = "gpt-4o-mini"
 # MODEL = "gpt-5-nano"
 # MODEL = "gpt-o4‑mini"
@@ -55,7 +56,7 @@ class LLMClient:
         max_tokens = kwargs.pop("max_tokens", None)
         response_format = kwargs.pop("response_format", None)
         OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
-        print("OPENAI_API_KEY:", OPENAI_API_KEY[:5])
+        print("OPENAI_API_KEY:", OPENAI_API_KEY[:15])
         if self.provider == "vertexai":
             prompt = "\n".join(
                 [msg["content"] for msg in messages if msg["role"] == "user"]
@@ -131,7 +132,7 @@ def _normalize_article(a: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 # @tool
-def fetch_and_prepare_news(query: str, n: int = 5, lang: str = "en") -> Dict[str, Any]:
+def fetch_and_prepare_news(queries: List[str], n: int = 5, lang: str = "en") -> Dict[str, Any]:
     """ Fetch top new articles for `query` """
     api_key = os.getenv("NEWS_API_ORG_KEY")
     if not api_key:
@@ -140,17 +141,22 @@ def fetch_and_prepare_news(query: str, n: int = 5, lang: str = "en") -> Dict[str
     from_date = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     to_date = datetime.now().strftime("%Y-%m-%d")
     params = {
-        "q": query, 
         "pageSize": max(DEFAULT_PAGE_SIZE, n), 
         "sortBy": "popularity", 
         "language": lang,
         "from": from_date,
         "to": to_date
     }
-    resp = requests.get(BASE, params={**params, "apiKey": api_key}, headers={"Accept": "application/json"}, timeout=8)
-    data = resp.json()
-    raw = data.get("articles", [])[:n]
+    raw = []
+    for query in queries:
+        resp = requests.get(BASE, params={**params, "q":query, "apiKey": api_key}, headers={"Accept": "application/json"}, timeout=8)
+        data = resp.json()
+        raw.extend(data.get("articles", [])[:n])
+    print("raw")
+    print(raw)
     articles = [_normalize_article(a) for a in raw]
+    print("articles")
+    print(articles)
     bullets: List[str] = []
     for a in articles:
         one_line = (a.get("description") or a.get("content") or "").split("\n")[0].strip()
@@ -159,7 +165,8 @@ def fetch_and_prepare_news(query: str, n: int = 5, lang: str = "en") -> Dict[str
         date = a.get("publishedAt", "").split("T")[0]
         bullets.append(f"{a['title']} — {one_line} ({a.get('source_name')},{date}) — {a.get('url')}")
     combined = "\n".join(bullets)
-    print(articles)
+    print("combined")
+    print(combined)
     return {"status": "ok", "totalResults": data.get("totalResults", 0), "articles": articles, "combined_summary": combined}
 
 

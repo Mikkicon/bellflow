@@ -107,7 +107,7 @@ def run_agent(context: AgentContext, provider: str = "openai") -> AnalysisResult
     topic_prompt = [
         {
             "role": "system",
-            "content": 'You are a concise assistant. Return a JSON array of three short topic phrases (e.g. ["topic1", "topic2", "topic3"]). No extra text.',
+            "content": 'You are a concise assistant. Return a JSON array of three short topics phrases (e.g. ["topic1", "topic2", "topic3"]). No extra text. I will search news for these topics so make them news-related',
         },
         {
             "role": "user",
@@ -122,7 +122,7 @@ def run_agent(context: AgentContext, provider: str = "openai") -> AnalysisResult
     print(topics)
 
     # Step 2: fetch news for topics (use helper)
-    news_result = fetch_and_prepare_news(query=" OR ".join(topics), n=5)
+    news_result = fetch_and_prepare_news(queries=topics, n=5)
     news_summary = (
         news_result.get("combined_summary") if isinstance(news_result, dict) else ""
     )
