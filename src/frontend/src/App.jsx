@@ -170,8 +170,8 @@ function App() {
           textAlign="center"
         >
           <VStack gap={3}>
-            <Heading size="5xl" fontWeight="semibold" color="var(--brand-primary)">
-              Ready to uncover insights?
+            <Heading size="7xl" fontWeight="semibold" color="var(--brand-primary)">
+              Go Viral?
             </Heading>
             <Text fontSize="lg" color="gray.500">
               Paste a social profile link to get an AI-powered analysis and next-step recommendations.
